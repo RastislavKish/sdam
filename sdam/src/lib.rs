@@ -60,6 +60,10 @@ impl Sdam {
         self.audio_handler.do_send(Seek::Relative(-seconds*1000));
         }
 
+    pub fn set_rate(&mut self, rate: f64) {
+        self.audio_handler.do_send(SetRate {rate });
+        }
+
     }
 impl Drop for Sdam {
 
@@ -110,6 +114,10 @@ pub enum Seek {
 
 #[derive(Message)]
 #[rtype(result="()")]
+struct SetRate { rate: f64 }
+
+#[derive(Message)]
+#[rtype(result="()")]
 pub struct Quit {}
 
 pub struct AudioHandler {
@@ -118,6 +126,7 @@ pub struct AudioHandler {
     decoding_buffer: Vec<i16>,
     current_position: Option<usize>,
     future_position: Option<usize>,
+    rate: f64,
     _host: cpal::Host,
     device: cpal::Device,
     stream_config: StreamConfig,
@@ -146,6 +155,7 @@ impl AudioHandler {
                 decoding_buffer: vec![0_i16; 5000],
                 current_position: None,
                 future_position: None,
+                rate: 1.0,
                 _host: host,
                 device,
                 stream_config: config,
@@ -153,6 +163,30 @@ impl AudioHandler {
                 playback_state: PlaybackState::Stopped,
                 }
             })
+        }
+
+    fn active_rate(&self) -> f64 {
+        if self.rate==1.0 {
+            return 1.0;
+            }
+
+        if let Some(current_position)=&self.current_position {
+            if self.audio.len()-current_position<=5 {
+                return 1.0;
+                }
+            }
+
+        self.rate
+        }
+
+    fn decode_into_producer(&mut self, frame: &Arc<OpusFrame>, producer: &mut ringbuf::HeapProducer<i16>, active_rate: f64) {
+        let decoded_samples=self.decoder.decode(frame.data(), &mut self.decoding_buffer, false).unwrap();
+        if active_rate==1.0 {
+            producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+            }
+        else {
+            panic!("Modifying playback rate is not yet implemented");
+            }
         }
 
     fn stream_err_fn(err: cpal::StreamError) {
@@ -310,6 +344,13 @@ impl Handler<Seek> for AudioHandler {
         // However this inprecision in theory shouldn't be noticeable
         }
     }
+impl Handler<SetRate> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: SetRate, _ctx: &mut Context<Self>) -> Self::Result {
+        self.rate=msg.rate;
+        }
+    }
 
 impl Handler<Quit> for AudioHandler {
     type Result=();
@@ -324,15 +365,17 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, _msg: UpdateAudioBuffer, ctx: &mut Context<Self>) -> Self::Result {
-        if let PlaybackState::Playing(_stream, audio_producer)=&self.playback_state {
-            let mut audio_producer=audio_producer.lock().unwrap();
+        if let PlaybackState::Playing(_stream, audio_producer_mutex)=&self.playback_state {
+            let audio_producer_mutex=audio_producer_mutex.clone(); //This clone is necessary, othervise the borrow checker wouldn't let borrowing self as mutable
+            let mut audio_producer=audio_producer_mutex.lock().unwrap();
 
-            if audio_producer.len()<=1920 {
+            let active_rate=self.active_rate();
+
+            if audio_producer.len()<=(1920.0/active_rate) as usize {
                 if let Some(current_position)=self.current_position {
                     if self.future_position.is_none() {
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
-                            let decoded_samples=self.decoder.decode(future_frame.data(), &mut self.decoding_buffer, false).unwrap();
-                            audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
                             self.future_position=Some(current_position+1);
                             }
                         }
@@ -342,22 +385,18 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
                         let current_position=future_position;
 
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
-                            let decoded_samples=self.decoder.decode(future_frame.data(), &mut self.decoding_buffer, false).unwrap();
-                            audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
                             self.future_position=Some(current_position+1);
                             }
                         }
                     }
                 else {
                     if let Some(frame)=self.audio.get_frame(0) {
-                        let decoded_samples=self.decoder.decode(frame.data(), &mut self.decoding_buffer, false).unwrap();
-                        audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                        self.decode_into_producer(&frame, &mut audio_producer, active_rate);
                         self.current_position=Some(0);
 
                         if let Some(future_frame)=self.audio.get_frame(1) {
-
-                            let decoded_samples=self.decoder.decode(future_frame.data(), &mut self.decoding_buffer, false).unwrap();
-                            audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
                             self.future_position=Some(1);
                             }
                         }
