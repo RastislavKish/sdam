@@ -47,6 +47,12 @@ impl Sdam {
     pub fn play(&mut self) {
         self.audio_handler.do_send(StartPlayback {});
         }
+    pub fn pause(&mut self) {
+        self.audio_handler.do_send(PausePlayback {});
+        }
+    pub fn toggle_playback(&mut self) {
+        self.audio_handler.do_send(TogglePlayback {});
+        }
     pub fn forward(&mut self, seconds: i32) {
         self.audio_handler.do_send(Seek::Relative(seconds*1000));
         }
@@ -87,6 +93,10 @@ pub struct StartPlayback {}
 #[derive(Message)]
 #[rtype(result="()")]
 pub struct PausePlayback {}
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct TogglePlayback {}
 
 #[derive(Message)]
 #[rtype(result="()")]
@@ -205,7 +215,15 @@ impl Handler<StartPlayback> for AudioHandler {
 
                 ctx.address().do_send(UpdateAudioBuffer {});
                 },
-            _ => {},
+            PlaybackState::Paused(output_stream, audio_producer) => {
+                let output_stream=output_stream.clone();
+                let audio_producer=audio_producer.clone();
+
+                self.playback_state=PlaybackState::Playing(output_stream, audio_producer);
+
+                ctx.address().do_send(UpdateAudioBuffer {});
+                },
+            PlaybackState::Playing(_, _) => {},
             }
         }
     }
@@ -218,6 +236,16 @@ impl Handler<PausePlayback> for AudioHandler {
             let audio_producer=audio_producer.clone();
 
             self.playback_state=PlaybackState::Paused(output_stream, audio_producer);
+            }
+        }
+    }
+impl Handler<TogglePlayback> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, _msg: TogglePlayback, ctx: &mut Context<Self>) -> Self::Result {
+        match &self.playback_state {
+            PlaybackState::Playing(_, _) => ctx.address().do_send(PausePlayback {}),
+            PlaybackState::Paused(_, _) | PlaybackState::Stopped => ctx.address().do_send(StartPlayback {}),
             }
         }
     }
