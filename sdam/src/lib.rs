@@ -113,7 +113,6 @@ pub struct AudioHandler {
     stream_config: StreamConfig,
     decoder: Decoder,
     playback_state: PlaybackState,
-    _latency_in_samples: usize,
     }
 impl AudioHandler {
 
@@ -142,7 +141,6 @@ impl AudioHandler {
                 stream_config: config,
                 decoder,
                 playback_state: PlaybackState::Stopped,
-                _latency_in_samples: 0,
                 }
             })
         }
