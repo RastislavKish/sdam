@@ -184,8 +184,20 @@ impl AudioHandler {
         if active_rate==1.0 {
             producer.push_slice(&self.decoding_buffer[..decoded_samples]);
             }
+        else if active_rate>1.0 {
+            let chunk=&self.decoding_buffer[..(decoded_samples as f64/active_rate) as usize];
+            producer.push_slice(chunk);
+            }
         else {
-            panic!("Modifying playback rate is not yet implemented");
+            let recip_rate=active_rate.recip();
+
+            for _ in 0..recip_rate.trunc() as usize {
+                producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                }
+
+            if recip_rate.fract()!=0.0 {
+                producer.push_slice(&self.decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
+                }
             }
         }
 
@@ -348,6 +360,10 @@ impl Handler<SetRate> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, msg: SetRate, _ctx: &mut Context<Self>) -> Self::Result {
+        if msg.rate<=0.0 {
+            return;
+            }
+
         self.rate=msg.rate;
         }
     }
@@ -403,7 +419,7 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
                     }
                 }
 
-            ctx.notify_later(UpdateAudioBuffer {}, std::time::Duration::from_millis(20));
+            ctx.notify_later(UpdateAudioBuffer {}, std::time::Duration::from_millis(5));
             }
         }
     }
