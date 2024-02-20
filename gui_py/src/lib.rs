@@ -29,16 +29,27 @@ fn start_playback() {
 fn pause_playback() {
     //let mut sdam=SDAM.lock().unwrap();
     }
+#[pyfunction]
+fn toggle_playback() {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.toggle_playback();
+    }
 
 #[pyfunction]
-fn forward() {
+fn forward(seconds: i32) {
     let mut sdam=SDAM.lock().unwrap();
-    sdam.forward(5);
+    sdam.forward(seconds);
     }
 #[pyfunction]
-fn backward() {
+fn backward(seconds: i32) {
     let mut sdam=SDAM.lock().unwrap();
-    sdam.backward(5);
+    sdam.backward(seconds);
+    }
+
+#[pyfunction]
+fn set_rate(rate: f64) {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.set_rate(rate);
     }
 
 #[pymodule]
@@ -49,9 +60,12 @@ fn gui_py(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(start_playback, m)?)?;
     m.add_function(wrap_pyfunction!(pause_playback, m)?)?;
+    m.add_function(wrap_pyfunction!(toggle_playback, m)?)?;
 
     m.add_function(wrap_pyfunction!(forward, m)?)?;
     m.add_function(wrap_pyfunction!(backward, m)?)?;
+
+    m.add_function(wrap_pyfunction!(set_rate, m)?)?;
 
     //m.add_function(wrap_pyfunction!(, m)?)?;
 

@@ -14,8 +14,13 @@ class SdamWindow(MainWindow):
     def __init__(self):
         super().__init__("main window", "Untitled - SDAM")
 
+        self._rate=1.0
+
         recording_group=Group("Recording")
         playback_group=Group("Playback")
+        rate_group=Group("Rate", parent=playback_group, order=2)
+        forward_group=Group("Forward", parent=playback_group, order=3)
+        backward_group=Group("Backward", parent=playback_group, order=4)
 
         recording_start=Command(self.recording_start,
             text="Start",
@@ -28,70 +33,97 @@ class SdamWindow(MainWindow):
             group=recording_group,
             )
 
-        playback_start=Command(self.playback_start,
-            text="Start / pause",
+        playback_toggle=Command(self.playback_toggle,
+            text="Play / Pause",
             shortcut=Key.MOD_1+Key.K,
             group=playback_group,
             order=1,
             )
-        playback_increase_rate=Command(self.playback_increase_rate,
-            text="Increase rate",
-            shortcut=Key.MOD_1+Key.O,
-            group=playback_group,
+
+        playback_rate_original=Command(self.playback_rate_original,
+            text="Original",
+            shortcut=Key.MOD_1+Key.I,
+            group=rate_group,
+            order=1,
+            )
+        playback_rate_increase=Command(self.playback_rate_increase,
+            text="Increase",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.O,
+            group=rate_group,
             order=2,
             )
-        playback_decrease_rate=Command(self.playback_decrease_rate,
-            text="Decrease rate",
-            shortcut=Key.MOD_1+Key.U,
-            group=playback_group,
+        playback_rate_decrease=Command(self.playback_rate_decrease,
+            text="Decrease",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.U,
+            group=rate_group,
             order=3,
             )
-        playback_original_rate=Command(self.playback_original_rate,
-            text="Original rate",
-            shortcut=Key.MOD_1+Key.I,
-            group=playback_group,
+        playback_rate_double=Command(self.playback_rate_double,
+            text="Double",
+            shortcut=Key.MOD_1+Key.O,
+            group=rate_group,
             order=4,
             )
-        playback_forward_5_seconds=Command(self.playback_forward_5_seconds,
-            text="Forward 5 seconds",
-            shortcut=Key.MOD_1+Key.L,
-            group=playback_group,
+        playback_rate_triple=Command(self.playback_rate_triple,
+            text="Triple",
+            shortcut=Key.MOD_1+Key.P,
+            group=rate_group,
             order=5,
             )
-        playback_forward_10_seconds=Command(self.playback_forward_10_seconds,
-            text="Forward 10 seconds",
-            group=playback_group,
+        playback_rate_half=Command(self.playback_rate_half,
+            text="Half",
+            shortcut=Key.MOD_1+Key.U,
+            group=rate_group,
             order=6,
             )
+
+        playback_forward_5_seconds=Command(self.playback_forward_5_seconds,
+            text="5 seconds",
+            shortcut=Key.MOD_1+Key.L,
+            group=forward_group,
+            order=1,
+            )
+        playback_forward_10_seconds=Command(self.playback_forward_10_seconds,
+            text="10 seconds",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.L,
+            group=forward_group,
+            order=2,
+            )
         playback_forward_1_minute=Command(self.playback_forward_1_minute,
-            text="Forward 1 minute",
-            group=playback_group,
-            order=7,
+            text="1 minute",
+            shortcut=Key.MOD_1+Key.SEMICOLON,
+            group=forward_group,
+            order=3,
             )
 
         playback_backward_5_seconds=Command(self.playback_backward_5_seconds,
-            text="Backward 5 seconds",
+            text="5 seconds",
             shortcut=Key.MOD_1+Key.J,
-            group=playback_group,
-            order=8,
+            group=backward_group,
+            order=1,
             )
         playback_backward_10_seconds=Command(self.playback_backward_10_seconds,
-            text="Backward 10 seconds",
-            group=playback_group,
-            order=9,
+            text="10 seconds",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.J,
+            group=backward_group,
+            order=2,
             )
         playback_backward_1_minute=Command(self.playback_backward_1_minute,
-            text="Backward 1 minute",
-            group=playback_group,
-            order=10,
+            text="1 minute",
+            shortcut=Key.MOD_1+Key.H,
+            group=backward_group,
+            order=3,
             )
 
         self.toolbar.add(recording_start,
             recording_stop,
-            playback_start,
-            playback_increase_rate,
-            playback_decrease_rate,
-            playback_original_rate,
+            playback_toggle,
+            playback_rate_original,
+            playback_rate_increase,
+            playback_rate_decrease,
+            playback_rate_double,
+            playback_rate_triple,
+            playback_rate_half,
             playback_forward_5_seconds,
             playback_forward_10_seconds,
             playback_forward_1_minute,
@@ -110,26 +142,44 @@ class SdamWindow(MainWindow):
     def recording_stop(self, sender):
         gui_py.stop_recording()
 
-    def playback_start(self, sender):
-        gui_py.start_playback()
-    def playback_increase_rate(self, sender):
-        pass
-    def playback_decrease_rate(self, sender):
-        pass
-    def playback_original_rate(self, sender):
-        pass
+    def playback_toggle(self, sender):
+        gui_py.toggle_playback()
+
+    def playback_rate_original(self, sender):
+        self._rate=1.0
+
+        gui_py.set_rate(self._rate)
+    def playback_rate_increase(self, sender):
+        self._rate+=0.25
+        if self._rate>3.0:
+            self._rate=3.0
+
+        gui_py.set_rate(self._rate)
+    def playback_rate_decrease(self, sender):
+        self._rate-=0.25
+        if self._rate<=0.0:
+            self._rate=0.25
+
+        gui_py.set_rate(self._rate)
+    def playback_rate_double(self, sender):
+        gui_py.set_rate(2.0)
+    def playback_rate_triple(self, sender):
+        gui_py.set_rate(3.0)
+    def playback_rate_half(self, sender):
+        gui_py.set_rate(0.5)
+
     def playback_forward_5_seconds(self, sender):
-        gui_py.forward()
+        gui_py.forward(5)
     def playback_forward_10_seconds(self, sender):
-        pass
+        gui_py.forward(10)
     def playback_forward_1_minute(self, sender):
-        pass
+        gui_py.forward(60)
     def playback_backward_5_seconds(self, sender):
-        gui_py.backward()
+        gui_py.backward(5)
     def playback_backward_10_seconds(self, sender):
-        pass
+        gui_py.backward(10)
     def playback_backward_1_minute(self, sender):
-        pass
+        gui_py.backward(60)
 
 class SdamApp(App):
 
