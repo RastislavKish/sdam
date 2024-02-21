@@ -10,6 +10,7 @@ edition = "2021"
 actix="0.13"
 anyhow="1.0.79"
 cpal="0.15.2"
+derive-getters="0.3.0"
 opus="0.3.0"
 ringbuf="0.3.3"
 

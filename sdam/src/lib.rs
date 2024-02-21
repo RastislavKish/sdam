@@ -5,6 +5,8 @@ use actix::prelude::*;
 use cpal::traits::{HostTrait, DeviceTrait, StreamTrait};
 use cpal::{BufferSize, SampleRate, StreamConfig};
 
+use derive_getters::Getters;
+
 use ringbuf::HeapRb;
 
 use opus::{Encoder, Decoder};
@@ -87,6 +89,171 @@ impl OpusFrame {
 
     pub fn data(&self) -> &[u8] {
         &self.data[..]
+        }
+    }
+
+#[derive(Clone, Debug, Getters)]
+pub struct Mark {
+    id: Option<u64>,
+    frame_offset: usize,
+    level: usize,
+    title: Option<String>,
+    }
+impl Mark {
+
+    pub fn new(frame_offset: usize, level: usize, title: Option<String>) -> Mark {
+        assert!(level>=1);
+
+        Mark {
+            id: None,
+            frame_offset,
+            level,
+            title,
+            }
+        }
+
+    pub fn with_id(&self, id: u64) -> Mark {
+        Mark {
+            id: Some(id),
+            frame_offset: self.frame_offset,
+            level: self.level,
+            title: self.title.clone(),
+            }
+        }
+
+    pub fn is(&self, id: u64) -> bool {
+        if let Some(self_id)=self.id {
+            return self_id==id;
+            }
+
+        false
+        }
+
+    }
+
+pub struct MarkManager {
+    marks: Vec<Mark>,
+    }
+impl MarkManager {
+
+    pub fn new() -> MarkManager {
+        MarkManager {
+            marks: vec![],
+            }
+        }
+
+    pub fn add(&mut self, mark: Mark) {
+        self.marks.push(mark.with_id(self.get_available_id()));
+        }
+    pub fn get(&self, id: u64) -> Result<&Mark, anyhow::Error> {
+        for mark in &self.marks {
+            if mark.is(id) {
+                return Ok(mark);
+                }
+            }
+
+        anyhow::bail!("Mark with id {id} not found.");
+        }
+    pub fn get_mark_list(&self) -> &Vec<Mark> {
+        &self.marks
+        }
+    pub fn remove(&mut self, id: u64) -> bool {
+        for (index, mark) in self.marks.iter().enumerate() {
+            if mark.is(id) {
+                self.marks.drain(index..index+1);
+                return true;
+                }
+            }
+
+        false
+        }
+
+    pub fn get_next_closest(&self, frame_offset: usize) -> Option<&Mark> {
+        if self.marks.len()==0 {
+            return None;
+            }
+
+        let mut closest_match: Option<(usize, usize)>=None;
+
+        for (index, mark) in self.marks.iter().enumerate() {
+            if *mark.frame_offset()<=frame_offset {
+                continue;
+                }
+
+            let frame_delta=mark.frame_offset()-frame_offset;
+
+            if let Some((_, min_frame_delta))=closest_match {
+                if frame_delta<min_frame_delta {
+                    closest_match=Some((index, frame_delta));
+                    }
+                }
+            else {
+                closest_match=Some((index, frame_delta));
+                }
+            }
+
+        return if let Some((index, _))=closest_match {
+            Some(&self.marks[index])
+            }
+        else {
+            None
+            };
+        }
+    pub fn get_previous_closest(&self, frame_offset: usize) -> Option<&Mark> {
+        if self.marks.len()==0 {
+            return None;
+            }
+
+        let mut closest_match: Option<(usize, usize)>=None;
+
+        for (index, mark) in self.marks.iter().enumerate() {
+            if *mark.frame_offset()>=frame_offset {
+                continue;
+                }
+
+            let frame_delta=frame_offset-mark.frame_offset();
+
+            if let Some((_, min_frame_delta))=closest_match {
+                if frame_delta<min_frame_delta {
+                    closest_match=Some((index, frame_delta));
+                    }
+                }
+            else {
+                closest_match=Some((index, frame_delta));
+                }
+
+            }
+
+        return if let Some((index, _))=closest_match {
+            Some(&self.marks[index])
+            }
+        else {
+            None
+            };
+        }
+
+    fn get_available_id(&self) -> u64 {
+        let mut max_found_id: Option<u64>=None;
+
+        for mark in &self.marks {
+            if let Some(id)=mark.id() {
+                if let Some(max_id)=max_found_id {
+                    if *id>max_id {
+                        max_found_id=Some(*id);
+                        }
+                    }
+                else {
+                    max_found_id=Some(*id);
+                    }
+                }
+            }
+
+        return if let Some(id)=max_found_id {
+            id+1
+            }
+        else {
+            0
+            };
         }
     }
 
@@ -635,5 +802,89 @@ mod tests {
         assert_eq!(cb.push(&[5]), Some(vec![vec![1, 2, 3, 4, 5]]));
         assert_eq!(cb.push(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]), Some(vec![vec![1, 2, 3, 4, 5], vec![6, 7, 8, 9, 10]]));
         assert_eq!(cb.push(&[14, 15]), Some(vec![vec![11, 12, 13, 14, 15]]));
+        }
+
+    #[test]
+    fn mark_manager_id_test() {
+        let mut manager=MarkManager::new();
+
+        let m1=Mark::new(0, 1, None);
+        let m2=Mark::new(0, 1, None);
+        let m3=Mark::new(0, 1, None);
+        let m4=Mark::new(0, 1, None);
+
+        manager.add(m1);
+        manager.add(m2);
+        manager.add(m3);
+
+        for (index, mark) in manager.get_mark_list().iter().enumerate() {
+            assert!(mark.is(index as u64));
+            }
+
+        assert!(manager.remove(1));
+
+        manager.add(m4);
+
+        let mark_list=manager.get_mark_list();
+
+        assert_eq!(mark_list.len(), 3);
+        assert!(mark_list.last().unwrap().is(3));
+        }
+
+    #[test]
+    fn next_closest_mark_test() {
+        let m1=Mark::new(3, 1, None);
+        let m2=Mark::new(5, 1, None);
+        let m3=Mark::new(7, 1, None);
+
+        let mut manager=MarkManager::new();
+
+        //The order of additions is intended to make the manager go through multiple marks after the current offset when searching for the next-one
+
+        manager.add(m1);
+        manager.add(m3);
+        manager.add(m2);
+
+        let tested_offsets: Vec<usize>=vec![1, 3, 4, 5, 8];
+        let expected_results: Vec<Option<u64>>=vec![Some(0), Some(2), Some(2), Some(1), None];
+
+        for (tested_offset, expected_result) in tested_offsets.iter().zip(expected_results) {
+            let closest_match=manager.get_next_closest(*tested_offset);
+            let matched_id=if let Some(mark)=closest_match {
+                mark.id().clone()
+                }
+            else {
+                None
+                };
+
+            assert_eq!(matched_id, expected_result);
+            }
+        }
+
+    #[test]
+    fn previous_closest_mark_test() {
+        let m1=Mark::new(3, 1, None);
+        let m2=Mark::new(5, 1, None);
+        let m3=Mark::new(7, 1, None);
+
+        let mut manager=MarkManager::new();
+        manager.add(m1);
+        manager.add(m2);
+        manager.add(m3);
+
+        let tested_offsets: Vec<usize>=vec![1, 3, 4, 5, 8];
+        let expected_results: Vec<Option<u64>>=vec![None, None, Some(0), Some(0), Some(2)];
+
+        for (tested_offset, expected_result) in tested_offsets.iter().zip(expected_results) {
+            let closest_match=manager.get_previous_closest(*tested_offset);
+            let matched_id=if let Some(mark)=closest_match {
+                mark.id().clone()
+                }
+            else {
+                None
+                };
+
+            assert_eq!(matched_id, expected_result);
+            }
         }
     }
