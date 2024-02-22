@@ -47,14 +47,14 @@ impl Sdam {
 
     pub fn load(&mut self, path: &Path) -> Result<(), anyhow::Error> {
         let path=path.to_owned();
-        let (res_sender, res_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
+        let (result_sender, result_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
 
         self.audio_handler.do_send(Load {
             path,
-            result: res_sender
+            result_sender,
             });
 
-        res_receiver.recv()?
+        result_receiver.recv()?
         }
     pub fn save(&mut self, path: Option<&Path>) -> Result<(), anyhow::Error> {
         let path=if let Some(p)=path {
@@ -64,14 +64,14 @@ impl Sdam {
             None
             };
 
-        let (res_sender, res_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
+        let (result_sender, result_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
 
         self.audio_handler.do_send(Save {
             path,
-            result: res_sender
+            result_sender,
             });
 
-        res_receiver.recv()?
+        result_receiver.recv()?
         }
 
     pub fn start_recording(&mut self) {
@@ -96,6 +96,39 @@ impl Sdam {
     pub fn backward(&mut self, seconds: i32) {
         self.audio_handler.do_send(Seek::Relative(-seconds*1000));
         }
+
+    // Getters
+
+    pub fn file_name(&mut self) -> Option<String> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<String>>();
+
+        self.audio_handler.do_send(GetFileName {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn file_path(&mut self) -> Option<PathBuf> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<PathBuf>>();
+
+        self.audio_handler.do_send(GetFilePath {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn audio_len(&mut self) -> usize {
+        let (result_sender, result_receiver)=mpsc::channel::<usize>();
+
+        self.audio_handler.do_send(GetAudioLen {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn current_position(&mut self) -> Option<usize> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<usize>>();
+
+        self.audio_handler.do_send(GetCurrentPosition {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+
+    // Setters
 
     pub fn set_rate(&mut self, rate: f64) {
         self.audio_handler.do_send(SetRate {rate });
@@ -324,7 +357,27 @@ pub enum Seek {
 
 #[derive(Message)]
 #[rtype(result="()")]
-pub struct GetFilePath { result: mpsc::sender<Option<PathBuffer>>}
+pub struct GetFileName {
+    result_sender: mpsc::Sender<Option<String>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetFilePath {
+    result_sender: mpsc::Sender<Option<PathBuf>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetAudioLen {
+    result_sender: mpsc::Sender<usize>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetCurrentPosition {
+    result_sender: mpsc::Sender<Option<usize>>,
+    }
 
 #[derive(Message)]
 #[rtype(result="()")]
@@ -336,11 +389,17 @@ pub struct SetUserText { text: String }
 
 #[derive(Message)]
 #[rtype(result="()")]
-pub struct Load { path: PathBuf, result: mpsc::Sender<Result<(), anyhow::Error>> }
+pub struct Load {
+    path: PathBuf,
+    result_sender: mpsc::Sender<Result<(), anyhow::Error>>,
+    }
 
 #[derive(Message)]
 #[rtype(result="()")]
-pub struct Save { path: Option<PathBuf>, result: mpsc::Sender<Result<(), anyhow::Error>> }
+pub struct Save {
+    path: Option<PathBuf>,
+    result_sender: mpsc::Sender<Result<(), anyhow::Error>>,
+    }
 
 #[derive(Message)]
 #[rtype(result="()")]
@@ -590,6 +649,36 @@ impl Handler<Seek> for AudioHandler {
         // However this inprecision in theory shouldn't be noticeable
         }
     }
+
+impl Handler<GetFileName> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetFileName, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.file_name.clone()).unwrap();
+        }
+    }
+impl Handler<GetFilePath> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetFilePath, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.file_path.clone()).unwrap();
+        }
+    }
+impl Handler<GetAudioLen> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetAudioLen, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.audio.len()).unwrap();
+        }
+    }
+impl Handler<GetCurrentPosition> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetCurrentPosition, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.current_position.clone()).unwrap();
+        }
+    }
+
 impl Handler<SetRate> for AudioHandler {
     type Result=();
 
@@ -613,7 +702,7 @@ impl Handler<Load> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, msg: Load, _ctx: &mut Context<Self>) -> Self::Result {
-        msg.result.send((move || {
+        msg.result_sender.send((move || {
             let mut file=File::open(&msg.path)?;
 
             let mut serialized: Vec<u8>=Vec::new();
@@ -640,7 +729,7 @@ impl Handler<Save> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, msg: Save, _ctx: &mut Context<Self>) -> Self::Result {
-        msg.result.send((move || {
+        msg.result_sender.send((move || {
             let path=if let Some(p)=&msg.path {
                 p.clone()
                 }
