@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{mpsc, Arc, Mutex};
 
 use actix::prelude::*;
 
@@ -8,6 +11,9 @@ use cpal::{BufferSize, SampleRate, StreamConfig};
 use derive_getters::Getters;
 
 use ringbuf::HeapRb;
+
+use serde::{Serialize, Deserialize};
+use rmp_serde;
 
 use opus::{Encoder, Decoder};
 
@@ -37,6 +43,35 @@ impl Sdam {
             audio_handler,
             actix_thread: Some(actix_thread),
             }
+        }
+
+    pub fn load(&mut self, path: &Path) -> Result<(), anyhow::Error> {
+        let path=path.to_owned();
+        let (res_sender, res_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
+
+        self.audio_handler.do_send(Load {
+            path,
+            result: res_sender
+            });
+
+        res_receiver.recv()?
+        }
+    pub fn save(&mut self, path: Option<&Path>) -> Result<(), anyhow::Error> {
+        let path=if let Some(p)=path {
+            Some(p.to_owned())
+            }
+        else {
+            None
+            };
+
+        let (res_sender, res_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
+
+        self.audio_handler.do_send(Save {
+            path,
+            result: res_sender
+            });
+
+        res_receiver.recv()?
         }
 
     pub fn start_recording(&mut self) {
@@ -92,7 +127,7 @@ impl OpusFrame {
         }
     }
 
-#[derive(Clone, Debug, Getters)]
+#[derive(Clone, Debug, Getters, Serialize, Deserialize)]
 pub struct Mark {
     id: Option<u64>,
     frame_offset: usize,
@@ -131,6 +166,7 @@ impl Mark {
 
     }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarkManager {
     marks: Vec<Mark>,
     }
@@ -257,6 +293,13 @@ impl MarkManager {
         }
     }
 
+#[derive(Clone, Getters, Serialize, Deserialize)]
+pub struct SdamFileModel {
+    audio: Vec<Vec<u8>>,
+    marks: MarkManager,
+    text: String,
+    }
+
 #[derive(Message)]
 #[rtype(result="()")]
 pub struct StartPlayback {}
@@ -281,13 +324,31 @@ pub enum Seek {
 
 #[derive(Message)]
 #[rtype(result="()")]
-struct SetRate { rate: f64 }
+pub struct GetFilePath { result: mpsc::sender<Option<PathBuffer>>}
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct SetRate { rate: f64 }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct SetUserText { text: String }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct Load { path: PathBuf, result: mpsc::Sender<Result<(), anyhow::Error>> }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct Save { path: Option<PathBuf>, result: mpsc::Sender<Result<(), anyhow::Error>> }
 
 #[derive(Message)]
 #[rtype(result="()")]
 pub struct Quit {}
 
 pub struct AudioHandler {
+    file_name: Option<String>,
+    file_path: Option<PathBuf>,
     audio: AudioContainer,
     recorder: Addr<Recorder>,
     decoding_buffer: Vec<i16>,
@@ -299,6 +360,8 @@ pub struct AudioHandler {
     stream_config: StreamConfig,
     decoder: Decoder,
     playback_state: PlaybackState,
+    mark_manager: MarkManager,
+    user_text: String,
     }
 impl AudioHandler {
 
@@ -317,6 +380,8 @@ impl AudioHandler {
             let decoder=Decoder::new(48000, opus::Channels::Mono).unwrap();
 
             AudioHandler {
+                file_name: None,
+                file_path: None,
                 audio,
                 recorder,
                 decoding_buffer: vec![0_i16; 5000],
@@ -328,6 +393,8 @@ impl AudioHandler {
                 stream_config: config,
                 decoder,
                 playback_state: PlaybackState::Stopped,
+                mark_manager: MarkManager::new(),
+                user_text: String::new(),
                 }
             })
         }
@@ -534,7 +601,78 @@ impl Handler<SetRate> for AudioHandler {
         self.rate=msg.rate;
         }
     }
+impl Handler<SetUserText> for AudioHandler {
+    type Result=();
 
+    fn handle(&mut self, msg: SetUserText, _ctx: &mut Context<Self>) -> Self::Result {
+        self.user_text=msg.text;
+        }
+    }
+
+impl Handler<Load> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: Load, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result.send((move || {
+            let mut file=File::open(&msg.path)?;
+
+            let mut serialized: Vec<u8>=Vec::new();
+            file.read_to_end(&mut serialized)?;
+
+            let model: SdamFileModel=rmp_serde::from_slice(&serialized)?;
+
+            drop(serialized);
+
+            let SdamFileModel { audio, marks, text }=model;
+
+            self.audio=AudioContainer::from_vec(audio);
+            self.mark_manager=marks;
+            self.user_text=text;
+
+            self.file_path=Some(msg.path.clone());
+            self.file_name=Some(msg.path.file_name().unwrap().to_str().unwrap().to_string());
+
+            Ok(())
+            })()).unwrap();
+        }
+    }
+impl Handler<Save> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: Save, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result.send((move || {
+            let path=if let Some(p)=&msg.path {
+                p.clone()
+                }
+            else if let Some(p)=&self.file_path {
+                p.clone()
+                }
+            else {
+                anyhow::bail!("No file opened");
+                };
+
+            let mut file=File::create(&path)?;
+
+            let model=SdamFileModel {
+                audio: self.audio.to_vec(),
+                marks: self.mark_manager.clone(),
+                text: self.user_text.clone(),
+                };
+
+            let serialized=rmp_serde::to_vec(&model).unwrap();
+            drop(model);
+
+            file.write(&serialized)?;
+
+            drop(serialized);
+
+            self.file_path=Some(path.clone());
+            self.file_name=Some(path.file_name().unwrap().to_str().unwrap().to_string());
+
+            Ok(())
+            })()).unwrap();
+        }
+    }
 impl Handler<Quit> for AudioHandler {
     type Result=();
 
@@ -623,6 +761,20 @@ impl AudioContainer {
         AudioContainer {
             frames: Vec::new(),
             }
+        }
+    pub fn from_vec(v: Vec<Vec<u8>>) -> AudioContainer {
+        let frames: Vec<Arc<OpusFrame>>=v.into_iter()
+        .map(|i| Arc::new(OpusFrame::new(i)))
+        .collect();
+
+        AudioContainer {
+            frames
+            }
+        }
+    pub fn to_vec(&self) -> Vec<Vec<u8>> {
+        self.frames.iter()
+        .map(|i| i.data().to_vec())
+        .collect()
         }
 
     pub fn get_frame(&self, id: usize) -> Option<Arc<OpusFrame>> {
