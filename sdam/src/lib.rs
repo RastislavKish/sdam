@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Mutex};
 
 use actix::prelude::*;
@@ -45,8 +45,8 @@ impl Sdam {
             }
         }
 
-    pub fn load(&mut self, path: &Path) -> Result<(), anyhow::Error> {
-        let path=path.to_owned();
+    pub fn load(&mut self, path: &str) -> Result<(), anyhow::Error> {
+        let path=PathBuf::from(path);
         let (result_sender, result_receiver)=mpsc::channel::<Result<(), anyhow::Error>>();
 
         self.audio_handler.do_send(Load {
@@ -56,9 +56,9 @@ impl Sdam {
 
         result_receiver.recv()?
         }
-    pub fn save(&mut self, path: Option<&Path>) -> Result<(), anyhow::Error> {
+    pub fn save(&mut self, path: Option<&str>) -> Result<(), anyhow::Error> {
         let path=if let Some(p)=path {
-            Some(p.to_owned())
+            Some(PathBuf::from(p))
             }
         else {
             None
@@ -127,11 +127,22 @@ impl Sdam {
 
         result_receiver.recv().unwrap()
         }
+    pub fn user_text(&mut self) -> String {
+        let (result_sender, result_receiver)=mpsc::channel::<String>();
+
+        self.audio_handler.do_send(GetUserText {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
 
     // Setters
 
     pub fn set_rate(&mut self, rate: f64) {
         self.audio_handler.do_send(SetRate {rate });
+        }
+
+    pub fn set_user_text(&mut self, text: &str) {
+        self.audio_handler.do_send(SetUserText{ text: text.to_string() });
         }
 
     }
@@ -377,6 +388,12 @@ pub struct GetAudioLen {
 #[rtype(result="()")]
 pub struct GetCurrentPosition {
     result_sender: mpsc::Sender<Option<usize>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetUserText {
+    result_sender: mpsc::Sender<String>,
     }
 
 #[derive(Message)]
@@ -678,6 +695,13 @@ impl Handler<GetCurrentPosition> for AudioHandler {
         msg.result_sender.send(self.current_position.clone()).unwrap();
         }
     }
+impl Handler<GetUserText> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetUserText, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.user_text.clone()).unwrap();
+        }
+    }
 
 impl Handler<SetRate> for AudioHandler {
     type Result=();
@@ -719,7 +743,10 @@ impl Handler<Load> for AudioHandler {
             self.user_text=text;
 
             self.file_path=Some(msg.path.clone());
-            self.file_name=Some(msg.path.file_name().unwrap().to_str().unwrap().to_string());
+            self.file_name=Some(msg.path.file_name().unwrap().to_string_lossy().to_string());
+            self.playback_state=PlaybackState::Stopped;
+            self.current_position=None;
+            self.future_position=None;
 
             Ok(())
             })()).unwrap();
@@ -756,7 +783,7 @@ impl Handler<Save> for AudioHandler {
             drop(serialized);
 
             self.file_path=Some(path.clone());
-            self.file_name=Some(path.file_name().unwrap().to_str().unwrap().to_string());
+            self.file_name=Some(path.file_name().unwrap().to_string_lossy().to_string());
 
             Ok(())
             })()).unwrap();

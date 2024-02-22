@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import sys
+
 import toga
 
 from toga import App, MainWindow, Window
@@ -21,6 +23,16 @@ class SdamWindow(MainWindow):
         rate_group=Group("Rate", parent=playback_group, order=2)
         forward_group=Group("Forward", parent=playback_group, order=3)
         backward_group=Group("Backward", parent=playback_group, order=4)
+
+        load=Command(self.load,
+            text="Load",
+            group=Group.APP,
+            )
+        save=Command(self.save,
+            text="Save",
+            shortcut=Key.MOD_1+Key.S,
+            group=Group.APP,
+            )
 
         recording_start=Command(self.recording_start,
             text="Start",
@@ -115,7 +127,9 @@ class SdamWindow(MainWindow):
             order=3,
             )
 
-        self.toolbar.add(recording_start,
+        self.toolbar.add(load,
+            save,
+            recording_start,
             recording_stop,
             playback_toggle,
             playback_rate_original,
@@ -135,6 +149,22 @@ class SdamWindow(MainWindow):
         self.content=self._text_input
 
         self._text_input.focus()
+
+    async def load(self, sender):
+        result=await self.open_file_dialog("LOad a file", file_types=["sdam"], multiple_select=False)
+
+        if result is not None:
+            self.load_from_file(str(result))
+    async def save(self, sender):
+        file_path=gui_py.file_path()
+
+        if file_path=="":
+            result=await self.save_file_dialog("Save to file", ".sdam", file_types=["sdam"])
+
+            if result is not None:
+                self.save_to_file(str(result))
+        else:
+            self.save_to_file(file_path)
 
     def recording_start(self, sender):
         print("Starting recording...")
@@ -181,14 +211,34 @@ class SdamWindow(MainWindow):
     def playback_backward_1_minute(self, sender):
         gui_py.backward(60)
 
+    def load_from_file(self, path):
+        result=gui_py.load(path)
+
+        if result!="":
+            self.error_dialog("Error", result)
+            return
+
+        self._text_input.value=gui_py.user_text()
+
+        self.title=f"{gui_py.file_name()} - SDAM"
+    def save_to_file(self, path):
+        gui_py.set_user_text(self._text_input.value)
+        gui_py.save(path)
+        self.title=f"{gui_py.file_name()} - SDAM"
+
 class SdamApp(App):
 
     def __init__(self):
         super().__init__("SDAM", "com.rastislavkish.sdam")
 
     def startup(self):
-        self.main_window=SdamWindow()
+        sdam_window=SdamWindow()
+
+        self.main_window=sdam_window
         self.main_window.show()
+
+        if len(sys.argv)==2:
+            sdam_window.load_from_file(sys.argv[1])
 
 if __name__=="__main__":
     app=SdamApp()

@@ -38,6 +38,19 @@ fn main() {
                 "toggle" | "t" => sdam.toggle_playback(),
                 "forward" | "f" => sdam.forward(5),
                 "backward" | "b" => sdam.backward(5),
+                "load" | "l" => {
+
+                    match sdam.load("output.sdam") {
+                        Ok(_) => println!("Loaded"),
+                        Err(msg) => eprintln!("Error: {msg}"),
+                        }
+                    },
+                "save" | "s" => {
+                    match sdam.save(Some("output.sdam")) {
+                        Ok(_) => println!("Saved"),
+                        Err(msg) => eprintln!("Error: {msg}"),
+                        }
+                    },
                 "quit" | "q" => break,
                 _ => {},
                 }
