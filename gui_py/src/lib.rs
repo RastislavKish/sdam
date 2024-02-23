@@ -67,6 +67,27 @@ fn backward(seconds: i32) {
     sdam.backward(seconds);
     }
 
+#[pyfunction]
+fn jump_to_start() {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.jump_to_start();
+    }
+#[pyfunction]
+fn jump_to_end() {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.jump_to_end();
+    }
+#[pyfunction]
+fn jump_to_percentage(percentage: usize) {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.jump_to_percentage(percentage);
+    }
+#[pyfunction]
+fn jump_to_time(seconds: usize) {
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.jump_to_time(seconds);
+    }
+
 // Getters
 
 #[pyfunction]
@@ -92,7 +113,11 @@ fn audio_len() -> PyResult<usize> {
     let mut sdam=SDAM.lock().unwrap();
     Ok(sdam.audio_len())
     }
-
+#[pyfunction]
+fn audio_duration() -> PyResult<usize> {
+    let mut sdam=SDAM.lock().unwrap();
+    Ok(sdam.audio_duration())
+    }
 #[pyfunction]
 fn user_text() -> PyResult<String> {
     let mut sdam=SDAM.lock().unwrap();
@@ -106,7 +131,6 @@ fn set_rate(rate: f64) {
     let mut sdam=SDAM.lock().unwrap();
     sdam.set_rate(rate);
     }
-
 #[pyfunction]
 fn set_user_text(text: &str) {
     let mut sdam=SDAM.lock().unwrap();
@@ -129,11 +153,17 @@ fn gui_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(forward, m)?)?;
     m.add_function(wrap_pyfunction!(backward, m)?)?;
 
+    m.add_function(wrap_pyfunction!(jump_to_start, m)?)?;
+    m.add_function(wrap_pyfunction!(jump_to_end, m)?)?;
+    m.add_function(wrap_pyfunction!(jump_to_percentage, m)?)?;
+    m.add_function(wrap_pyfunction!(jump_to_time, m)?)?;
+
     // Getters
 
     m.add_function(wrap_pyfunction!(file_name, m)?)?;
     m.add_function(wrap_pyfunction!(file_path, m)?)?;
     m.add_function(wrap_pyfunction!(audio_len, m)?)?;
+    m.add_function(wrap_pyfunction!(audio_duration, m)?)?;
     m.add_function(wrap_pyfunction!(user_text, m)?)?;
 
     // Setters

@@ -17,6 +17,12 @@ use rmp_serde;
 
 use opus::{Encoder, Decoder};
 
+//These constants are not implemented in the code yet
+
+const FRAME_DURATION: usize=40; //ms
+//const SAMPLING_RATE: u16=48000;
+//const FRAME_SIZE: usize=(FRAME_DURATION as f64*SAMPLING_RATE as f64/1000.0) as usize;
+
 pub struct Sdam {
     audio_handler: Addr<AudioHandler>,
     actix_thread: Option<std::thread::JoinHandle<()>>,
@@ -96,6 +102,24 @@ impl Sdam {
     pub fn backward(&mut self, seconds: i32) {
         self.audio_handler.do_send(Seek::Relative(-seconds*1000));
         }
+    pub fn jump_to_start(&mut self) {
+        self.audio_handler.do_send(Seek::ToStart);
+        }
+    pub fn jump_to_end(&mut self) {
+        self.audio_handler.do_send(Seek::ToEnd);
+        }
+    pub fn jump_to_percentage(&mut self, percentage: usize) {
+        if percentage>100 {
+            return;
+            }
+
+        self.audio_handler.do_send(Seek::Percentual(percentage));
+        }
+    pub fn jump_to_time(&mut self, seconds: usize) {
+        let frame=(1000*seconds)/FRAME_DURATION;
+
+        self.audio_handler.do_send(Seek::Absolute(frame));
+        }
 
     // Getters
 
@@ -119,6 +143,9 @@ impl Sdam {
         self.audio_handler.do_send(GetAudioLen {result_sender});
 
         result_receiver.recv().unwrap()
+        }
+    pub fn audio_duration(&mut self) -> usize {
+        (self.audio_len()*FRAME_DURATION)/1000
         }
     pub fn current_position(&mut self) -> Option<usize> {
         let (result_sender, result_receiver)=mpsc::channel::<Option<usize>>();
