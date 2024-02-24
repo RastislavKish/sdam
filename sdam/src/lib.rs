@@ -152,6 +152,27 @@ impl Sdam {
 
         result_receiver.recv().unwrap()
         }
+    pub fn is_playing(&mut self) -> bool {
+        let (result_sender, result_receiver)=mpsc::channel::<bool>();
+
+        self.audio_handler.do_send(GetIsPlaying {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn is_paused(&mut self) -> bool {
+        let (result_sender, result_receiver)=mpsc::channel::<bool>();
+
+        self.audio_handler.do_send(GetIsPaused {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn is_recording(&mut self) -> bool {
+        let (result_sender, result_receiver)=mpsc::channel::<bool>();
+
+        self.audio_handler.do_send(GetIsRecording {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
     pub fn user_text(&mut self) -> String {
         let (result_sender, result_receiver)=mpsc::channel::<String>();
 
@@ -165,7 +186,6 @@ impl Sdam {
     pub fn set_rate(&mut self, rate: f64) {
         self.audio_handler.do_send(SetRate {rate });
         }
-
     pub fn set_user_text(&mut self, text: &str) {
         self.audio_handler.do_send(SetUserText{ text: text.to_string() });
         }
@@ -417,6 +437,24 @@ pub struct GetCurrentPosition {
 
 #[derive(Message)]
 #[rtype(result="()")]
+pub struct GetIsPlaying {
+    result_sender: mpsc::Sender<bool>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetIsPaused {
+    result_sender: mpsc::Sender<bool>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetIsRecording {
+    result_sender: mpsc::Sender<bool>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
 pub struct GetUserText {
     result_sender: mpsc::Sender<String>,
     }
@@ -453,6 +491,7 @@ pub struct AudioHandler {
     file_path: Option<PathBuf>,
     audio: AudioContainer,
     recorder: Addr<Recorder>,
+    recording: bool,
     decoding_buffer: Vec<i16>,
     current_position: Option<usize>,
     future_position: Option<usize>,
@@ -493,6 +532,7 @@ impl AudioHandler {
                 file_path: None,
                 audio,
                 recorder,
+                recording: false,
                 decoding_buffer: vec![0_i16; 2*FRAME_SIZE],
                 current_position: None,
                 future_position: None,
@@ -601,6 +641,7 @@ impl Handler<StartRecording> for AudioHandler {
     fn handle(&mut self, _msg: StartRecording, _ctx: &mut Context<Self>) -> Self::Result {
         println!("Starting recording");
         self.recorder.do_send(StartRecording {});
+        self.recording=true;
         }
     }
 impl Handler<StopRecording> for AudioHandler {
@@ -609,6 +650,7 @@ impl Handler<StopRecording> for AudioHandler {
     fn handle(&mut self, _msg: StopRecording, _ctx: &mut Context<Self>) -> Self::Result {
         println!("Stopping recording");
         self.recorder.do_send(StopRecording {});
+        self.recording=false;
         }
     }
 
@@ -724,6 +766,37 @@ impl Handler<GetCurrentPosition> for AudioHandler {
 
     fn handle(&mut self, msg: GetCurrentPosition, _ctx: &mut Context<Self>) -> Self::Result {
         msg.result_sender.send(self.current_position.clone()).unwrap();
+        }
+    }
+impl Handler<GetIsPlaying> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetIsPlaying, _ctx: &mut Context<Self>) -> Self::Result {
+        if let PlaybackState::Playing=self.playback_state {
+            msg.result_sender.send(true).unwrap();
+            return;
+            }
+
+        msg.result_sender.send(false).unwrap();
+        }
+    }
+impl Handler<GetIsPaused> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetIsPaused, _ctx: &mut Context<Self>) -> Self::Result {
+        if let PlaybackState::Paused=self.playback_state {
+            msg.result_sender.send(true).unwrap();
+            return;
+            }
+
+        msg.result_sender.send(false).unwrap();
+        }
+    }
+impl Handler<GetIsRecording> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetIsRecording, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.recording).unwrap();
         }
     }
 impl Handler<GetUserText> for AudioHandler {
