@@ -1066,6 +1066,10 @@ impl Handler<StartRecording> for Recorder {
     type Result=();
 
     fn handle(&mut self, _msg: StartRecording, ctx: &mut Context<Self>) -> Self::Result {
+        if !self.input_stream.is_none() {
+            return;
+            }
+
         let mut collector_buffer=CollectorBuffer::with_capacity(FRAME_SIZE);
         let addr=ctx.address();
 

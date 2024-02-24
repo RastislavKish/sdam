@@ -53,6 +53,8 @@ class SdamWindow(MainWindow):
         super().__init__("main window", "Untitled - SDAM")
 
         self._rate=1.0
+        self._time_travel=False
+        self._recording_before_timetravel=False
 
         recording_group=Group("Recording")
         playback_group=Group("Playback")
@@ -76,6 +78,7 @@ class SdamWindow(MainWindow):
             parent=jump_to_group,
             order=3,
             )
+        time_travel_group=Group("Time travel")
 
         load=Command(self.load,
             text="Load",
@@ -247,9 +250,20 @@ class SdamWindow(MainWindow):
             )
         playback_jump_to_time=Command(self.playback_jump_to_time,
             text="Time",
-            shortcut=Key.MOD_1+Key.T,
+            shortcut=Key.MOD_1+Key.MOD_2+Key.T,
             group=jump_to_group,
             order=4,
+            )
+
+        time_travel_activate=Command(self.time_travel_activate,
+            text="Activate",
+            shortcut=Key.MOD_1+Key.T,
+            group=time_travel_group,
+            )
+        time_travel_deactivate=Command(self.time_travel_deactivate,
+            text="Deactivate",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.T,
+            group=time_travel_group,
             )
 
         self.toolbar.add(load,
@@ -283,6 +297,8 @@ class SdamWindow(MainWindow):
             playback_jump_to_percentage_90,
             playback_jump_to_percentage_100,
             playback_jump_to_time,
+            time_travel_activate,
+            time_travel_deactivate,
             )
         self._text_input=MultilineTextInput()
         self.content=self._text_input
@@ -306,12 +322,20 @@ class SdamWindow(MainWindow):
             self.save_to_file(file_path)
 
     def recording_start(self, sender):
-        print("Starting recording...")
-        gui_py.start_recording()
+        if not gui_py.is_recording():
+            print("Starting recording...")
+            gui_py.pause_playback()
+            gui_py.start_recording()
     def recording_stop(self, sender):
-        gui_py.stop_recording()
+        if not self._time_travel:
+            gui_py.stop_recording()
+        else:
+            self._recording_before_time_travel=False
+            self.time_travel_deactivate(None)
 
     def playback_toggle(self, sender):
+        if gui_py.is_recording() and not self._time_travel and not gui_py.is_playing():
+            return
         gui_py.toggle_playback()
 
     def playback_rate_original(self, sender):
@@ -402,6 +426,25 @@ class SdamWindow(MainWindow):
             seconds=3600*parts[0]+60*parts[1]+parts[2]
 
         gui_py.jump_to_time(seconds)
+
+    def time_travel_activate(self, sender):
+        if not self._time_travel:
+            recording=gui_py.is_recording()
+
+            gui_py.pause_playback()
+            if not recording:
+                gui_py.start_recording()
+            gui_py.jump_to_end()
+            gui_py.start_playback()
+
+            self._recording_before_time_travel=recording
+            self._time_travel=True
+    def time_travel_deactivate(self, sender):
+        if self._time_travel:
+            gui_py.pause_playback()
+            if not self._recording_before_time_travel:
+                gui_py.stop_recording()
+            self._time_travel=False
 
     def load_from_file(self, path):
         result=gui_py.load(path)

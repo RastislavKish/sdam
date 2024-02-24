@@ -48,7 +48,8 @@ fn start_playback() {
     }
 #[pyfunction]
 fn pause_playback() {
-    //let mut sdam=SDAM.lock().unwrap();
+    let mut sdam=SDAM.lock().unwrap();
+    sdam.pause();
     }
 #[pyfunction]
 fn toggle_playback() {
@@ -119,6 +120,21 @@ fn audio_duration() -> PyResult<usize> {
     Ok(sdam.audio_duration())
     }
 #[pyfunction]
+fn is_playing() -> PyResult<bool> {
+    let mut sdam=SDAM.lock().unwrap();
+    Ok(sdam.is_playing())
+    }
+#[pyfunction]
+fn is_paused() -> PyResult<bool> {
+    let mut sdam=SDAM.lock().unwrap();
+    Ok(sdam.is_paused())
+    }
+#[pyfunction]
+fn is_recording() -> PyResult<bool> {
+    let mut sdam=SDAM.lock().unwrap();
+    Ok(sdam.is_recording())
+    }
+#[pyfunction]
 fn user_text() -> PyResult<String> {
     let mut sdam=SDAM.lock().unwrap();
     Ok(sdam.user_text())
@@ -164,6 +180,9 @@ fn gui_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(file_path, m)?)?;
     m.add_function(wrap_pyfunction!(audio_len, m)?)?;
     m.add_function(wrap_pyfunction!(audio_duration, m)?)?;
+    m.add_function(wrap_pyfunction!(is_playing, m)?)?;
+    m.add_function(wrap_pyfunction!(is_paused, m)?)?;
+    m.add_function(wrap_pyfunction!(is_recording, m)?)?;
     m.add_function(wrap_pyfunction!(user_text, m)?)?;
 
     // Setters
