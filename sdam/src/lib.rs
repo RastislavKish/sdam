@@ -448,6 +448,7 @@ pub struct Save {
 pub struct Quit {}
 
 pub struct AudioHandler {
+    self_addr: Addr<AudioHandler>,
     file_name: Option<String>,
     file_path: Option<PathBuf>,
     audio: AudioContainer,
@@ -457,8 +458,8 @@ pub struct AudioHandler {
     future_position: Option<usize>,
     rate: f64,
     _host: cpal::Host,
-    device: cpal::Device,
-    stream_config: StreamConfig,
+    _device: cpal::Device,
+    _stream_config: StreamConfig,
     decoder: Decoder,
     playback_state: PlaybackState,
     mark_manager: MarkManager,
@@ -468,6 +469,8 @@ impl AudioHandler {
 
     pub fn new() -> Addr<AudioHandler> {
         AudioHandler::create(|ctx| {
+            let self_addr=ctx.address();
+
             let audio=AudioContainer::new();
             let recorder=Recorder::new(ctx.address().recipient());
 
@@ -480,7 +483,10 @@ impl AudioHandler {
                 };
             let decoder=Decoder::new(SAMPLING_RATE, opus::Channels::Mono).unwrap();
 
+            let playback_state=Self::initialize_playback(&device, &config);
+
             AudioHandler {
+                self_addr,
                 file_name: None,
                 file_path: None,
                 audio,
@@ -490,14 +496,38 @@ impl AudioHandler {
                 future_position: None,
                 rate: 1.0,
                 _host: host,
-                device,
-                stream_config: config,
+                _device: device,
+                _stream_config: config,
                 decoder,
-                playback_state: PlaybackState::Stopped,
+                playback_state,
                 mark_manager: MarkManager::new(),
                 user_text: String::new(),
                 }
             })
+        }
+    fn initialize_playback(device: &cpal::Device, config: &StreamConfig) -> PlaybackState {
+        let ringbuf=HeapRb::<i16>::new(20*FRAME_SIZE);
+        let (audio_producer, mut audio_consumer)=ringbuf.split();
+
+        let output_fn=move |data: &mut [i16], _callback_info: &cpal::OutputCallbackInfo| {
+            let available_samples=audio_consumer.len();
+
+            if available_samples>=data.len() {
+                audio_consumer.pop_slice(data);
+                }
+            else {
+                audio_consumer.pop_slice(&mut data[..available_samples]);
+
+                let remaining_samples=data.len()-available_samples;
+
+                (&mut data[available_samples..]).copy_from_slice(&[0_i16; 5000][..remaining_samples]);
+                }
+            };
+
+        let output_stream=device.build_output_stream(config, output_fn, Self::stream_err_fn, None).unwrap();
+        output_stream.play().unwrap();
+
+        PlaybackState::Paused(Arc::new(output_stream), Arc::new(Mutex::new(audio_producer)))
         }
 
     fn active_rate(&self) -> f64 {
@@ -535,6 +565,24 @@ impl AudioHandler {
                 }
             }
         }
+    fn start_playback(&mut self) {
+        if let PlaybackState::Paused(output_stream, audio_producer)=&self.playback_state {
+            let output_stream=output_stream.clone();
+            let audio_producer=audio_producer.clone();
+
+            self.playback_state=PlaybackState::Playing(output_stream, audio_producer);
+
+            self.self_addr.do_send(UpdateAudioBuffer {});
+            }
+        }
+    fn pause_playback(&mut self) {
+        if let PlaybackState::Playing(output_stream, audio_producer)=&self.playback_state {
+            let output_stream=output_stream.clone();
+            let audio_producer=audio_producer.clone();
+
+            self.playback_state=PlaybackState::Paused(output_stream, audio_producer);
+            }
+        }
 
     fn stream_err_fn(err: cpal::StreamError) {
         eprintln!("An error occurred on playback stream {}", err);
@@ -568,65 +616,24 @@ impl Handler<StopRecording> for AudioHandler {
 impl Handler<StartPlayback> for AudioHandler {
     type Result=();
 
-    fn handle(&mut self, _msg: StartPlayback, ctx: &mut Context<Self>) -> Self::Result {
-        match &self.playback_state {
-            PlaybackState::Stopped => {
-                let ringbuf=HeapRb::<i16>::new(20*FRAME_SIZE);
-                let (audio_producer, mut audio_consumer)=ringbuf.split();
-
-                let output_fn=move |data: &mut [i16], _callback_info: &cpal::OutputCallbackInfo| {
-                    let available_samples=audio_consumer.len();
-
-                    if available_samples>=data.len() {
-                        audio_consumer.pop_slice(data);
-                        }
-                    else {
-                        audio_consumer.pop_slice(&mut data[..available_samples]);
-
-                        let remaining_samples=data.len()-available_samples;
-
-                        (&mut data[available_samples..]).copy_from_slice(&[0_i16; 5000][..remaining_samples]);
-                        }
-                    };
-
-                let output_stream=self.device.build_output_stream(&self.stream_config, output_fn, Self::stream_err_fn, None).unwrap();
-                output_stream.play().unwrap();
-
-                self.playback_state=PlaybackState::Playing(Arc::new(output_stream), Arc::new(Mutex::new(audio_producer)));
-
-                ctx.address().do_send(UpdateAudioBuffer {});
-                },
-            PlaybackState::Paused(output_stream, audio_producer) => {
-                let output_stream=output_stream.clone();
-                let audio_producer=audio_producer.clone();
-
-                self.playback_state=PlaybackState::Playing(output_stream, audio_producer);
-
-                ctx.address().do_send(UpdateAudioBuffer {});
-                },
-            PlaybackState::Playing(_, _) => {},
-            }
+    fn handle(&mut self, _msg: StartPlayback, _ctx: &mut Context<Self>) -> Self::Result {
+        self.start_playback();
         }
     }
 impl Handler<PausePlayback> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, _msg: PausePlayback, _ctx: &mut Context<Self>) -> Self::Result {
-        if let PlaybackState::Playing(output_stream, audio_producer)=&self.playback_state {
-            let output_stream=output_stream.clone();
-            let audio_producer=audio_producer.clone();
-
-            self.playback_state=PlaybackState::Paused(output_stream, audio_producer);
-            }
+        self.pause_playback();
         }
     }
 impl Handler<TogglePlayback> for AudioHandler {
     type Result=();
 
-    fn handle(&mut self, _msg: TogglePlayback, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: TogglePlayback, _ctx: &mut Context<Self>) -> Self::Result {
         match &self.playback_state {
-            PlaybackState::Playing(_, _) => ctx.address().do_send(PausePlayback {}),
-            PlaybackState::Paused(_, _) | PlaybackState::Stopped => ctx.address().do_send(StartPlayback {}),
+            PlaybackState::Playing(_, _) => self.pause_playback(),
+            PlaybackState::Paused(_, _) => self.start_playback(),
             }
         }
     }
@@ -769,7 +776,7 @@ impl Handler<Load> for AudioHandler {
 
             self.file_path=Some(msg.path.clone());
             self.file_name=Some(msg.path.file_name().unwrap().to_string_lossy().to_string());
-            self.playback_state=PlaybackState::Stopped;
+            self.pause_playback();
             self.current_position=None;
             self.future_position=None;
 
@@ -880,7 +887,6 @@ impl Handler<NewOpusFrame> for AudioHandler {
 enum PlaybackState {
     Playing(Arc<cpal::Stream>, Arc<Mutex<ringbuf::HeapProducer<i16>>>),
     Paused(Arc<cpal::Stream>, Arc<Mutex<ringbuf::HeapProducer<i16>>>),
-    Stopped,
     }
 
 #[derive(Message)]
