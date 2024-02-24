@@ -17,11 +17,9 @@ use rmp_serde;
 
 use opus::{Encoder, Decoder};
 
-//These constants are not implemented in the code yet
-
 const FRAME_DURATION: usize=40; //ms
-//const SAMPLING_RATE: u16=48000;
-//const FRAME_SIZE: usize=(FRAME_DURATION as f64*SAMPLING_RATE as f64/1000.0) as usize;
+const SAMPLING_RATE: u32=48000;
+const FRAME_SIZE: usize=(FRAME_DURATION as f64*SAMPLING_RATE as f64/1000.0) as usize;
 
 pub struct Sdam {
     audio_handler: Addr<AudioHandler>,
@@ -476,18 +474,18 @@ impl AudioHandler {
             let host=cpal::default_host();
             let device=host.default_output_device().unwrap();
             let config=StreamConfig {
-                buffer_size: BufferSize::Fixed(1920),
+                buffer_size: BufferSize::Fixed(FRAME_SIZE as u32),
                 channels: 1,
-                sample_rate: SampleRate(48000),
+                sample_rate: SampleRate(SAMPLING_RATE),
                 };
-            let decoder=Decoder::new(48000, opus::Channels::Mono).unwrap();
+            let decoder=Decoder::new(SAMPLING_RATE, opus::Channels::Mono).unwrap();
 
             AudioHandler {
                 file_name: None,
                 file_path: None,
                 audio,
                 recorder,
-                decoding_buffer: vec![0_i16; 5000],
+                decoding_buffer: vec![0_i16; 2*FRAME_SIZE],
                 current_position: None,
                 future_position: None,
                 rate: 1.0,
@@ -573,7 +571,7 @@ impl Handler<StartPlayback> for AudioHandler {
     fn handle(&mut self, _msg: StartPlayback, ctx: &mut Context<Self>) -> Self::Result {
         match &self.playback_state {
             PlaybackState::Stopped => {
-                let ringbuf=HeapRb::<i16>::new(7000);
+                let ringbuf=HeapRb::<i16>::new(20*FRAME_SIZE);
                 let (audio_producer, mut audio_consumer)=ringbuf.split();
 
                 let output_fn=move |data: &mut [i16], _callback_info: &cpal::OutputCallbackInfo| {
@@ -659,7 +657,7 @@ impl Handler<Seek> for AudioHandler {
                     0
                     };
 
-                let mut frame=std::cmp::max(0, base+(delta_millis/40) as i32) as usize;
+                let mut frame=std::cmp::max(0, base+delta_millis/(FRAME_DURATION as i32)) as usize;
 
                 if frame>end_frame {
                     frame=end_frame;
@@ -835,7 +833,7 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
 
             let active_rate=self.active_rate();
 
-            if audio_producer.len()<=(1920.0/active_rate) as usize {
+            if audio_producer.len()<=(FRAME_SIZE as f64/active_rate) as usize {
                 if let Some(current_position)=self.current_position {
                     if self.future_position.is_none() {
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
@@ -955,11 +953,11 @@ impl Recorder {
         let host=cpal::default_host();
         let device=host.default_input_device().unwrap();
         let config=StreamConfig {
-            buffer_size: BufferSize::Fixed(1920),
+            buffer_size: BufferSize::Fixed(FRAME_SIZE as u32),
             channels: 1,
-            sample_rate: SampleRate(48000),
+            sample_rate: SampleRate(SAMPLING_RATE),
             };
-        let encoder=Encoder::new(48000, opus::Channels::Mono, opus::Application::Audio).unwrap();
+        let encoder=Encoder::new(SAMPLING_RATE, opus::Channels::Mono, opus::Application::Audio).unwrap();
 
         Recorder {
             _host: host,
@@ -984,7 +982,7 @@ impl Handler<NewAudioChunk> for Recorder {
     type Result=();
 
     fn handle(&mut self, msg: NewAudioChunk, _ctx: &mut Context<Self>) -> Self::Result {
-        let frame_buffer=self.encoder.encode_vec(&msg.chunk, 1920).unwrap();
+        let frame_buffer=self.encoder.encode_vec(&msg.chunk, FRAME_SIZE).unwrap();
         let frame=OpusFrame::new(frame_buffer);
         self.recipient.do_send(NewOpusFrame { frame });
         }
@@ -993,7 +991,7 @@ impl Handler<StartRecording> for Recorder {
     type Result=();
 
     fn handle(&mut self, _msg: StartRecording, ctx: &mut Context<Self>) -> Self::Result {
-        let mut collector_buffer=CollectorBuffer::with_capacity(1920);
+        let mut collector_buffer=CollectorBuffer::with_capacity(FRAME_SIZE);
         let addr=ctx.address();
 
         let input_fn=move |data: &[i16], _callback_info: &cpal::InputCallbackInfo| {
