@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 
 use actix::prelude::*;
 
@@ -460,6 +460,8 @@ pub struct AudioHandler {
     _host: cpal::Host,
     _device: cpal::Device,
     _stream_config: StreamConfig,
+    _output_stream: cpal::Stream,
+    audio_producer: ringbuf::HeapProducer<i16>,
     decoder: Decoder,
     playback_state: PlaybackState,
     mark_manager: MarkManager,
@@ -483,7 +485,7 @@ impl AudioHandler {
                 };
             let decoder=Decoder::new(SAMPLING_RATE, opus::Channels::Mono).unwrap();
 
-            let playback_state=Self::initialize_playback(&device, &config);
+            let (output_stream, audio_producer, playback_state)=Self::initialize_playback(&device, &config);
 
             AudioHandler {
                 self_addr,
@@ -498,6 +500,8 @@ impl AudioHandler {
                 _host: host,
                 _device: device,
                 _stream_config: config,
+                _output_stream: output_stream,
+                audio_producer,
                 decoder,
                 playback_state,
                 mark_manager: MarkManager::new(),
@@ -505,7 +509,7 @@ impl AudioHandler {
                 }
             })
         }
-    fn initialize_playback(device: &cpal::Device, config: &StreamConfig) -> PlaybackState {
+    fn initialize_playback(device: &cpal::Device, config: &StreamConfig) -> (cpal::Stream, ringbuf::HeapProducer<i16>, PlaybackState) {
         let ringbuf=HeapRb::<i16>::new(20*FRAME_SIZE);
         let (audio_producer, mut audio_consumer)=ringbuf.split();
 
@@ -527,7 +531,9 @@ impl AudioHandler {
         let output_stream=device.build_output_stream(config, output_fn, Self::stream_err_fn, None).unwrap();
         output_stream.play().unwrap();
 
-        PlaybackState::Paused(Arc::new(output_stream), Arc::new(Mutex::new(audio_producer)))
+        (output_stream,
+        audio_producer,
+        PlaybackState::Paused,)
         }
 
     fn active_rate(&self) -> f64 {
@@ -544,43 +550,36 @@ impl AudioHandler {
         self.rate
         }
 
-    fn decode_into_producer(&mut self, frame: &Arc<OpusFrame>, producer: &mut ringbuf::HeapProducer<i16>, active_rate: f64) {
+    fn decode_into_producer(&mut self, frame: &Arc<OpusFrame>, active_rate: f64) {
         let decoded_samples=self.decoder.decode(frame.data(), &mut self.decoding_buffer, false).unwrap();
         if active_rate==1.0 {
-            producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+            self.audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
             }
         else if active_rate>1.0 {
             let chunk=&self.decoding_buffer[..(decoded_samples as f64/active_rate) as usize];
-            producer.push_slice(chunk);
+            self.audio_producer.push_slice(chunk);
             }
         else {
             let recip_rate=active_rate.recip();
 
             for _ in 0..recip_rate.trunc() as usize {
-                producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                self.audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
                 }
 
             if recip_rate.fract()!=0.0 {
-                producer.push_slice(&self.decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
+                self.audio_producer.push_slice(&self.decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
                 }
             }
         }
     fn start_playback(&mut self) {
-        if let PlaybackState::Paused(output_stream, audio_producer)=&self.playback_state {
-            let output_stream=output_stream.clone();
-            let audio_producer=audio_producer.clone();
-
-            self.playback_state=PlaybackState::Playing(output_stream, audio_producer);
-
+        if let PlaybackState::Paused=self.playback_state {
+            self.playback_state=PlaybackState::Playing;
             self.self_addr.do_send(UpdateAudioBuffer {});
             }
         }
     fn pause_playback(&mut self) {
-        if let PlaybackState::Playing(output_stream, audio_producer)=&self.playback_state {
-            let output_stream=output_stream.clone();
-            let audio_producer=audio_producer.clone();
-
-            self.playback_state=PlaybackState::Paused(output_stream, audio_producer);
+        if let PlaybackState::Playing=self.playback_state {
+            self.playback_state=PlaybackState::Paused;
             }
         }
 
@@ -632,8 +631,8 @@ impl Handler<TogglePlayback> for AudioHandler {
 
     fn handle(&mut self, _msg: TogglePlayback, _ctx: &mut Context<Self>) -> Self::Result {
         match &self.playback_state {
-            PlaybackState::Playing(_, _) => self.pause_playback(),
-            PlaybackState::Paused(_, _) => self.start_playback(),
+            PlaybackState::Playing => self.pause_playback(),
+            PlaybackState::Paused => self.start_playback(),
             }
         }
     }
@@ -834,17 +833,14 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, _msg: UpdateAudioBuffer, ctx: &mut Context<Self>) -> Self::Result {
-        if let PlaybackState::Playing(_stream, audio_producer_mutex)=&self.playback_state {
-            let audio_producer_mutex=audio_producer_mutex.clone(); //This clone is necessary, othervise the borrow checker wouldn't let borrowing self as mutable
-            let mut audio_producer=audio_producer_mutex.lock().unwrap();
-
+        if let PlaybackState::Playing=self.playback_state {
             let active_rate=self.active_rate();
 
-            if audio_producer.len()<=(FRAME_SIZE as f64/active_rate) as usize {
+            if self.audio_producer.len()<=(FRAME_SIZE as f64/active_rate) as usize {
                 if let Some(current_position)=self.current_position {
                     if self.future_position.is_none() {
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
-                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
+                            self.decode_into_producer(&future_frame, active_rate);
                             self.future_position=Some(current_position+1);
                             }
                         }
@@ -854,18 +850,18 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
                         let current_position=future_position;
 
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
-                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
+                            self.decode_into_producer(&future_frame, active_rate);
                             self.future_position=Some(current_position+1);
                             }
                         }
                     }
                 else {
                     if let Some(frame)=self.audio.get_frame(0) {
-                        self.decode_into_producer(&frame, &mut audio_producer, active_rate);
+                        self.decode_into_producer(&frame, active_rate);
                         self.current_position=Some(0);
 
                         if let Some(future_frame)=self.audio.get_frame(1) {
-                            self.decode_into_producer(&future_frame, &mut audio_producer, active_rate);
+                            self.decode_into_producer(&future_frame, active_rate);
                             self.future_position=Some(1);
                             }
                         }
@@ -885,8 +881,8 @@ impl Handler<NewOpusFrame> for AudioHandler {
     }
 
 enum PlaybackState {
-    Playing(Arc<cpal::Stream>, Arc<Mutex<ringbuf::HeapProducer<i16>>>),
-    Paused(Arc<cpal::Stream>, Arc<Mutex<ringbuf::HeapProducer<i16>>>),
+    Playing,
+    Paused,
     }
 
 #[derive(Message)]
