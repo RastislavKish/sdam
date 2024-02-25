@@ -79,6 +79,12 @@ class SdamWindow(MainWindow):
             order=3,
             )
         time_travel_group=Group("Time travel")
+        marks_group=Group("Marks")
+        marks_add_group=Group("Add", parent=marks_group, order=1)
+        marks_add_labeled_group=Group("Add labeled", parent=marks_group, order=2)
+        marks_jump_to_group=Group("Jump to", parent=marks_group, order=3)
+        marks_edit_focused_mark_group=Group("Edit focused mark", parent=marks_group, order=4)
+
 
         load=Command(self.load,
             text="Load",
@@ -266,6 +272,96 @@ class SdamWindow(MainWindow):
             group=time_travel_group,
             )
 
+        marks_add_category_1_mark=Command(self.marks_add_category_1_mark,
+            text="Category 1 mark",
+            group=marks_add_group,
+            )
+        marks_add_category_2_mark=Command(self.marks_add_category_2_mark,
+            text="Category 2 mark",
+            group=marks_add_group,
+            )
+        marks_add_category_3_mark=Command(self.marks_add_category_3_mark,
+            text="Category 3 mark",
+            group=marks_add_group,
+            )
+        marks_add_category_4_mark=Command(self.marks_add_category_4_mark,
+            text="Category 4 mark",
+            group=marks_add_group,
+            )
+        marks_add_category_5_mark=Command(self.marks_add_category_5_mark,
+            text="Category 5 mark",
+            group=marks_add_group,
+            )
+
+        marks_add_labeled_category_1_mark=Command(self.marks_add_labeled_category_1_mark,
+            text="Category 1 mark",
+            group=marks_add_labeled_group,
+            )
+        marks_add_labeled_category_2_mark=Command(self.marks_add_labeled_category_2_mark,
+            text="Category 2 mark",
+            group=marks_add_labeled_group,
+            )
+        marks_add_labeled_category_3_mark=Command(self.marks_add_labeled_category_3_mark,
+            text="Category 3 mark",
+            group=marks_add_labeled_group,
+            )
+        marks_add_labeled_category_4_mark=Command(self.marks_add_labeled_category_4_mark,
+            text="Category 4 mark",
+            group=marks_add_labeled_group,
+            )
+        marks_add_labeled_category_5_mark=Command(self.marks_add_labeled_category_5_mark,
+            text="Category 5 mark",
+            group=marks_add_labeled_group,
+            )
+
+        marks_jump_to_next_mark=Command(self.marks_jump_to_next_mark,
+            text="Next mark",
+            order=1,
+            group=marks_jump_to_group,
+            )
+        marks_jump_to_next_closest_mark=Command(self.marks_jump_to_next_closest_mark,
+            text="Next closest mark",
+            order=2,
+            group=marks_jump_to_group,
+            )
+        marks_jump_to_previous_mark=Command(self.marks_jump_to_previous_mark,
+            text="Previous mark",
+            order=10,
+            group=marks_jump_to_group,
+            )
+        marks_jump_to_previous_closest_mark=Command(self.marks_jump_to_previous_closest_mark,
+            text="Previous closest mark",
+            order=11,
+            group=marks_jump_to_group,
+            )
+        marks_jump_to_focused_mark=Command(self.marks_jump_to_focused_mark,
+            text="Focused mark",
+            order=20,
+            group=marks_jump_to_group,
+            )
+
+        marks_edit_focused_mark_label=Command(self.marks_edit_focused_mark_label,
+            text="Label",
+            order=1,
+            group=marks_edit_focused_mark_group,
+            )
+        marks_edit_focused_mark_move_to_current_position=Command(self.marks_edit_focused_mark_move_to_current_position,
+            text="Move to current position",
+            order=2,
+            group=marks_edit_focused_mark_group,
+            )
+        marks_edit_focused_mark_delete=Command(self.marks_edit_focused_mark_delete,
+            text="Delete",
+            order=3,
+            group=marks_edit_focused_mark_group,
+            )
+
+        marks_view=Command(self.marks_view,
+            text="View",
+            order=5,
+            group=marks_group,
+            )
+
         self.toolbar.add(load,
             save,
             recording_start,
@@ -299,6 +395,25 @@ class SdamWindow(MainWindow):
             playback_jump_to_time,
             time_travel_activate,
             time_travel_deactivate,
+            marks_add_category_1_mark,
+            marks_add_category_2_mark,
+            marks_add_category_3_mark,
+            marks_add_category_4_mark,
+            marks_add_category_5_mark,
+            marks_add_labeled_category_1_mark,
+            marks_add_labeled_category_2_mark,
+            marks_add_labeled_category_3_mark,
+            marks_add_labeled_category_4_mark,
+            marks_add_labeled_category_5_mark,
+            marks_jump_to_next_mark,
+            marks_jump_to_next_closest_mark,
+            marks_jump_to_previous_mark,
+            marks_jump_to_previous_closest_mark,
+            marks_jump_to_focused_mark,
+            marks_edit_focused_mark_label,
+            marks_edit_focused_mark_move_to_current_position,
+            marks_edit_focused_mark_delete,
+            marks_view,
             )
         self._text_input=MultilineTextInput()
         self.content=self._text_input
@@ -445,6 +560,53 @@ class SdamWindow(MainWindow):
             if not self._recording_before_time_travel:
                 gui_py.stop_recording()
             self._time_travel=False
+
+    def marks_add_category_1_mark(self, sender):
+        self.marks_add_mark(1, None)
+    def marks_add_category_2_mark(self, sender):
+        self.marks_add_mark(2, None)
+    def marks_add_category_3_mark(self, sender):
+        self.marks_add_mark(3, None)
+    def marks_add_category_4_mark(self, sender):
+        self.marks_add_mark(4, None)
+    def marks_add_category_5_mark(self, sender):
+        self.marks_add_mark(5, None)
+
+    def marks_add_labeled_category_1_mark(self, sender):
+        self.marks_add_mark(1, None)
+    def marks_add_labeled_category_2_mark(self, sender):
+        self.marks_add_mark(2, None)
+    def marks_add_labeled_category_3_mark(self, sender):
+        self.marks_add_mark(3, None)
+    def marks_add_labeled_category_4_mark(self, sender):
+        self.marks_add_mark(4, None)
+    def marks_add_labeled_category_5_mark(self, sender):
+        self.marks_add_mark(5, None)
+
+    def marks_add_mark(self, category, label):
+        pass
+
+    def marks_jump_to_next_mark(self, sender):
+        pass
+    def marks_jump_to_next_closest_mark(self, sender):
+        pass
+    def marks_jump_to_previous_mark(self, sender):
+        pass
+    def marks_jump_to_previous_closest_mark(self, sender):
+        pass
+
+    def marks_jump_to_focused_mark(self, sender):
+        pass
+
+    def marks_edit_focused_mark_label(self, sender):
+        pass
+    def marks_edit_focused_mark_move_to_current_position(self, sender):
+        pass
+    def marks_edit_focused_mark_delete(self, sender):
+        pass
+
+    def marks_view(self, sender):
+        pass
 
     def load_from_file(self, path):
         result=gui_py.load(path)
