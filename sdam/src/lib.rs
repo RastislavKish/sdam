@@ -221,18 +221,18 @@ pub struct Mark {
     id: Option<u64>,
     frame_offset: usize,
     category: usize,
-    title: Option<String>,
+    label: Option<String>,
     }
 impl Mark {
 
-    pub fn new(frame_offset: usize, category: usize, title: Option<String>) -> Mark {
+    pub fn new(frame_offset: usize, category: usize, label: Option<String>) -> Mark {
         assert!(category>=1);
 
         Mark {
             id: None,
             frame_offset,
             category,
-            title,
+            label,
             }
         }
 
@@ -241,7 +241,7 @@ impl Mark {
             id: Some(id),
             frame_offset: self.frame_offset,
             category: self.category,
-            title: self.title.clone(),
+            label: self.label.clone(),
             }
         }
 
