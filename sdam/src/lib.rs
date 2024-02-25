@@ -220,18 +220,18 @@ impl OpusFrame {
 pub struct Mark {
     id: Option<u64>,
     frame_offset: usize,
-    level: usize,
+    category: usize,
     title: Option<String>,
     }
 impl Mark {
 
-    pub fn new(frame_offset: usize, level: usize, title: Option<String>) -> Mark {
-        assert!(level>=1);
+    pub fn new(frame_offset: usize, category: usize, title: Option<String>) -> Mark {
+        assert!(category>=1);
 
         Mark {
             id: None,
             frame_offset,
-            level,
+            category,
             title,
             }
         }
@@ -240,7 +240,7 @@ impl Mark {
         Mark {
             id: Some(id),
             frame_offset: self.frame_offset,
-            level: self.level,
+            category: self.category,
             title: self.title.clone(),
             }
         }
