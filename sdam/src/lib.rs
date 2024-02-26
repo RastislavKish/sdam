@@ -118,6 +118,9 @@ impl Sdam {
 
         self.audio_handler.do_send(Seek::Absolute(frame));
         }
+    pub fn jump_to_frame(&mut self, frame: usize) {
+        self.audio_handler.do_send(Seek::Absolute(frame));
+        }
 
     // Getters
 
@@ -173,6 +176,27 @@ impl Sdam {
 
         result_receiver.recv().unwrap()
         }
+    pub fn get_mark(&mut self, id: u64) -> Option<Mark> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<Mark>>();
+
+        self.audio_handler.do_send(GetMark {id, result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn next_closest_mark(&mut self, frame: usize) -> Option<Mark> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<Mark>>();
+
+        self.audio_handler.do_send(GetNextClosestMark {frame, result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn previous_closest_mark(&mut self, frame: usize) -> Option<Mark> {
+        let (result_sender, result_receiver)=mpsc::channel::<Option<Mark>>();
+
+        self.audio_handler.do_send(GetPreviousClosestMark {frame, result_sender});
+
+        result_receiver.recv().unwrap()
+        }
     pub fn user_text(&mut self) -> String {
         let (result_sender, result_receiver)=mpsc::channel::<String>();
 
@@ -183,6 +207,19 @@ impl Sdam {
 
     // Setters
 
+    pub fn add_mark(&mut self, mark: Mark) -> Mark {
+        let (result_sender, result_receiver)=mpsc::channel::<Mark>();
+
+        self.audio_handler.do_send(AddMark {mark, result_sender});
+
+        result_receiver.recv().unwrap()
+        }
+    pub fn edit_mark(&mut self, mark_id: u64, updated_mark: Mark) {
+        self.audio_handler.do_send(EditMark {id: mark_id, updated_mark});
+        }
+    pub fn remove_mark(&mut self, mark_id: u64) {
+        self.audio_handler.do_send(DeleteMark {id: mark_id});
+        }
     pub fn set_rate(&mut self, rate: f64) {
         self.audio_handler.do_send(SetRate {rate });
         }
@@ -267,8 +304,27 @@ impl MarkManager {
             }
         }
 
-    pub fn add(&mut self, mark: Mark) {
+    pub fn add(&mut self, mark: Mark) -> &Mark {
         self.marks.push(mark.with_id(self.get_available_id()));
+
+        self.marks.last().unwrap()
+        }
+    pub fn edit(&mut self, id: u64, updated_mark: Mark) -> Result<&Mark, anyhow::Error> {
+        let mut mark_index: Option<usize>=None;
+        for (index, mark) in self.marks.iter().enumerate() {
+            if mark.is(id) {
+                mark_index=Some(index);
+                break;
+                }
+            }
+
+        if let Some(index)=mark_index {
+            self.marks[index]=updated_mark.with_id(id);
+            return Ok(&self.marks[index]);
+            }
+        else {
+            anyhow::bail!("Unable to find mark with ID {id}");
+            }
         }
     pub fn get(&self, id: u64) -> Result<&Mark, anyhow::Error> {
         for mark in &self.marks {
@@ -455,9 +511,45 @@ pub struct GetIsRecording {
 
 #[derive(Message)]
 #[rtype(result="()")]
+pub struct GetMark {
+    id: u64,
+    result_sender: mpsc::Sender<Option<Mark>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetNextClosestMark {
+    frame: usize,
+    result_sender: mpsc::Sender<Option<Mark>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetPreviousClosestMark {
+    frame: usize,
+    result_sender: mpsc::Sender<Option<Mark>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
 pub struct GetUserText {
     result_sender: mpsc::Sender<String>,
     }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct AddMark {
+    mark: Mark,
+    result_sender: mpsc::Sender<Mark>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct EditMark {id: u64, updated_mark: Mark}
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct DeleteMark {id: u64}
 
 #[derive(Message)]
 #[rtype(result="()")]
@@ -622,6 +714,62 @@ impl AudioHandler {
             self.playback_state=PlaybackState::Paused;
             }
         }
+    fn seek(&mut self, seek: Seek) {
+        if self.audio.len()<3 {
+            return;
+            }
+
+        let end_frame=self.audio.len()-3; //Some offset is applied here to introduce latency for situations where recording is performed in parallel to playback
+
+        let frame=match seek {
+            Seek::Absolute(mut frame) => {
+                if frame>end_frame {
+                    frame=end_frame;
+                    }
+
+                frame
+                },
+            Seek::Relative(delta_millis) => {
+                let base=if let Some(current_position)=self.current_position {
+                    current_position as i32
+                    }
+                else {
+                    0
+                    };
+
+                let mut frame=std::cmp::max(0, base+delta_millis/(FRAME_DURATION as i32)) as usize;
+
+                if frame>end_frame {
+                    frame=end_frame;
+                    }
+
+                frame
+                },
+            Seek::Percentual(percent) => {
+                let mut frame=(self.audio.len() as f64*(percent as f64)/100.0) as usize;
+
+                if frame>end_frame {
+                    frame=end_frame;
+                    }
+
+                frame
+                },
+            Seek::ToStart => {
+                0
+                },
+            Seek::ToEnd => {
+                end_frame
+                },
+            };
+
+        self.current_position=Some(frame);
+        self.future_position=Some(frame+1);
+
+        //We don't perform loading the audio data into the output buffer here.
+        // The reason is if the user kept seeking rapidly, data would pile up in the buffer and weird things would happen, especially if the playback was paused at the moment, but even during the playback
+        // So instead, we just change the numbers and let the audio loop deal with it. We lose some precision that way (80ms), since the loop pwill consider those values aleady loaded in the buffer
+        // However this inprecision in theory shouldn't be noticeable
+        }
 
     fn stream_err_fn(err: cpal::StreamError) {
         eprintln!("An error occurred on playback stream {}", err);
@@ -683,60 +831,7 @@ impl Handler<Seek> for AudioHandler {
     type Result=();
 
     fn handle(&mut self, msg: Seek, _ctx: &mut Context<Self>) -> Self::Result {
-        if self.audio.len()<3 {
-            return;
-            }
-
-        let end_frame=self.audio.len()-3; //Some offset is applied here to introduce latency for situations where recording is performed in parallel to playback
-
-        let frame=match msg {
-            Seek::Absolute(mut frame) => {
-                if frame>end_frame {
-                    frame=end_frame;
-                    }
-
-                frame
-                },
-            Seek::Relative(delta_millis) => {
-                let base=if let Some(current_position)=self.current_position {
-                    current_position as i32
-                    }
-                else {
-                    0
-                    };
-
-                let mut frame=std::cmp::max(0, base+delta_millis/(FRAME_DURATION as i32)) as usize;
-
-                if frame>end_frame {
-                    frame=end_frame;
-                    }
-
-                frame
-                },
-            Seek::Percentual(percent) => {
-                let mut frame=(self.audio.len() as f64*(percent as f64)/100.0) as usize;
-
-                if frame>end_frame {
-                    frame=end_frame;
-                    }
-
-                frame
-                },
-            Seek::ToStart => {
-                0
-                },
-            Seek::ToEnd => {
-                end_frame
-                },
-            };
-
-        self.current_position=Some(frame);
-        self.future_position=Some(frame+1);
-
-        //We don't perform loading the audio data into the output buffer here.
-        // The reason is if the user kept seeking rapidly, data would pile up in the buffer and weird things would happen, especially if the playback was paused at the moment, but even during the playback
-        // So instead, we just change the numbers and let the audio loop deal with it. We lose some precision that way (80ms), since the loop pwill consider those values aleady loaded in the buffer
-        // However this inprecision in theory shouldn't be noticeable
+        self.seek(msg);
         }
     }
 
@@ -799,6 +894,40 @@ impl Handler<GetIsRecording> for AudioHandler {
         msg.result_sender.send(self.recording).unwrap();
         }
     }
+impl Handler<GetMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetMark, _ctx: &mut Context<Self>) -> Self::Result {
+        if let Ok(mark)=self.mark_manager.get(msg.id) {
+            msg.result_sender.send(Some(mark.clone())).unwrap();
+            return;
+            }
+        }
+    }
+impl Handler<GetNextClosestMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetNextClosestMark, _ctx: &mut Context<Self>) -> Self::Result {
+        if let Some(mark)=self.mark_manager.get_next_closest(msg.frame) {
+            msg.result_sender.send(Some(mark.clone())).unwrap();
+            return;
+            }
+
+        msg.result_sender.send(None).unwrap();
+        }
+    }
+impl Handler<GetPreviousClosestMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetPreviousClosestMark, _ctx: &mut Context<Self>) -> Self::Result {
+        if let Some(mark)=self.mark_manager.get_previous_closest(msg.frame) {
+            msg.result_sender.send(Some(mark.clone())).unwrap();
+            return;
+            }
+
+        msg.result_sender.send(None).unwrap();
+        }
+    }
 impl Handler<GetUserText> for AudioHandler {
     type Result=();
 
@@ -807,6 +936,29 @@ impl Handler<GetUserText> for AudioHandler {
         }
     }
 
+impl Handler<AddMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: AddMark, _ctx: &mut Context<Self>) -> Self::Result {
+        let assigned_mark=self.mark_manager.add(msg.mark.clone());
+
+        msg.result_sender.send(assigned_mark.clone()).unwrap();
+        }
+    }
+impl Handler<EditMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: EditMark, _ctx: &mut Context<Self>) -> Self::Result {
+        let _=self.mark_manager.edit(msg.id, msg.updated_mark);
+        }
+    }
+impl Handler<DeleteMark> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: DeleteMark, _ctx: &mut Context<Self>) -> Self::Result {
+        self.mark_manager.remove(msg.id);
+        }
+    }
 impl Handler<SetRate> for AudioHandler {
     type Result=();
 
