@@ -12,6 +12,7 @@ from toga.style.pack import COLUMN, LEFT, RIGHT, ROW, Pack
 from toga import Key
 
 import gui_py
+from gui_py import PyMark
 
 TIME_REGEX=re.compile(r"^(\d*:){,2}\d+$")
 
@@ -55,6 +56,7 @@ class SdamWindow(MainWindow):
         self._rate=1.0
         self._time_travel=False
         self._recording_before_timetravel=False
+        self._focused_mark=None
 
         recording_group=Group("Recording")
         playback_group=Group("Playback")
@@ -201,51 +203,61 @@ class SdamWindow(MainWindow):
             )
         playback_jump_to_percentage_0=Command(self.playback_jump_to_percentage_0,
             text="0%",
+            shortcut=Key.MOD_1+"0",
             group=percentage_group,
             order=1,
             )
         playback_jump_to_percentage_10=Command(self.playback_jump_to_percentage_10,
             text="10%",
+            shortcut=Key.MOD_1+"1",
             group=percentage_group,
             order=2,
             )
         playback_jump_to_percentage_20=Command(self.playback_jump_to_percentage_20,
             text="20%",
+            shortcut=Key.MOD_1+"2",
             group=percentage_group,
             order=3,
             )
         playback_jump_to_percentage_30=Command(self.playback_jump_to_percentage_30,
             text="30%",
+            shortcut=Key.MOD_1+"3",
             group=percentage_group,
             order=4,
             )
         playback_jump_to_percentage_40=Command(self.playback_jump_to_percentage_40,
             text="40%",
+            shortcut=Key.MOD_1+"4",
             group=percentage_group,
             order=5,
             )
         playback_jump_to_percentage_50=Command(self.playback_jump_to_percentage_50,
             text="50%",
+            shortcut=Key.MOD_1+"5",
             group=percentage_group,
             order=6,
             )
         playback_jump_to_percentage_60=Command(self.playback_jump_to_percentage_60,
             text="60%",
+            shortcut=Key.MOD_1+"6",
             group=percentage_group,
             order=7,
             )
         playback_jump_to_percentage_70=Command(self.playback_jump_to_percentage_70,
             text="70%",
+            shortcut=Key.MOD_1+"7",
             group=percentage_group,
             order=8,
             )
         playback_jump_to_percentage_80=Command(self.playback_jump_to_percentage_80,
             text="80%",
+            shortcut=Key.MOD_1+"8",
             group=percentage_group,
             order=9,
             )
         playback_jump_to_percentage_90=Command(self.playback_jump_to_percentage_90,
             text="90%",
+            shortcut=Key.MOD_1+"9",
             group=percentage_group,
             order=10,
             )
@@ -274,84 +286,102 @@ class SdamWindow(MainWindow):
 
         marks_add_category_1_mark=Command(self.marks_add_category_1_mark,
             text="Category 1 mark",
+            shortcut=Key.MOD_2+"1",
             group=marks_add_group,
             )
         marks_add_category_2_mark=Command(self.marks_add_category_2_mark,
             text="Category 2 mark",
+            shortcut=Key.MOD_2+"2",
             group=marks_add_group,
             )
         marks_add_category_3_mark=Command(self.marks_add_category_3_mark,
             text="Category 3 mark",
+            shortcut=Key.MOD_2+"3",
             group=marks_add_group,
             )
         marks_add_category_4_mark=Command(self.marks_add_category_4_mark,
             text="Category 4 mark",
+            shortcut=Key.MOD_2+"4",
             group=marks_add_group,
             )
         marks_add_category_5_mark=Command(self.marks_add_category_5_mark,
             text="Category 5 mark",
+            shortcut=Key.MOD_2+"5",
             group=marks_add_group,
             )
 
         marks_add_labeled_category_1_mark=Command(self.marks_add_labeled_category_1_mark,
             text="Category 1 mark",
+            shortcut=Key.MOD_1+Key.MOD_2+"1",
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_2_mark=Command(self.marks_add_labeled_category_2_mark,
             text="Category 2 mark",
+            shortcut=Key.MOD_1+Key.MOD_2+"2",
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_3_mark=Command(self.marks_add_labeled_category_3_mark,
             text="Category 3 mark",
+            shortcut=Key.MOD_1+Key.MOD_2+"3",
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_4_mark=Command(self.marks_add_labeled_category_4_mark,
             text="Category 4 mark",
+            shortcut=Key.MOD_1+Key.MOD_2+"4",
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_5_mark=Command(self.marks_add_labeled_category_5_mark,
             text="Category 5 mark",
+            shortcut=Key.MOD_1+Key.MOD_2+"5",
             group=marks_add_labeled_group,
             )
 
         marks_jump_to_next_mark=Command(self.marks_jump_to_next_mark,
             text="Next mark",
+            shortcut=Key.MOD_1+".",
             order=1,
             group=marks_jump_to_group,
             )
         marks_jump_to_next_closest_mark=Command(self.marks_jump_to_next_closest_mark,
             text="Next closest mark",
+            shortcut=Key.MOD_1+Key.SHIFT+".",
             order=2,
             group=marks_jump_to_group,
             )
         marks_jump_to_previous_mark=Command(self.marks_jump_to_previous_mark,
             text="Previous mark",
+            shortcut=Key.MOD_1+Key.M,
             order=10,
             group=marks_jump_to_group,
             )
         marks_jump_to_previous_closest_mark=Command(self.marks_jump_to_previous_closest_mark,
             text="Previous closest mark",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.M,
             order=11,
             group=marks_jump_to_group,
             )
         marks_jump_to_focused_mark=Command(self.marks_jump_to_focused_mark,
             text="Focused mark",
+            shortcut=Key.MOD_1+Key.COMMA,
             order=20,
             group=marks_jump_to_group,
             )
 
         marks_edit_focused_mark_label=Command(self.marks_edit_focused_mark_label,
             text="Label",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.COMMA,
             order=1,
             group=marks_edit_focused_mark_group,
             )
         marks_edit_focused_mark_move_to_current_position=Command(self.marks_edit_focused_mark_move_to_current_position,
             text="Move to current position",
+            shortcut=Key.MOD_1+Key.MOD_2+Key.COMMA,
             order=2,
             group=marks_edit_focused_mark_group,
             )
         marks_edit_focused_mark_delete=Command(self.marks_edit_focused_mark_delete,
             text="Delete",
+            shortcut=Key.MOD_1+Key.MOD_2+Key.SHIFT+Key.COMMA,
             order=3,
             group=marks_edit_focused_mark_group,
             )
@@ -584,26 +614,74 @@ class SdamWindow(MainWindow):
         self.marks_add_mark(5, None)
 
     def marks_add_mark(self, category, label):
-        pass
+        position=None
+
+        if self._time_travel:
+            position=gui_py.current_position()
+        elif gui_py.is_recording():
+            position=gui_py.audio_len()
+        else:
+            position=gui_py.current_position()
+
+        gui_py.add_mark(PyMark(position, category, label))
 
     def marks_jump_to_next_mark(self, sender):
-        pass
+        if self._focused_mark is not None:
+            next_mark=gui_py.next_closest_mark(self._focused_mark.frame_offset)
+            if next_mark is not None:
+                self._focused_mark=next_mark
+                gui_py.jump_to_frame(next_mark.frame_offset)
+        else:
+            self.marks_jump_to_next_closest_mark(None)
     def marks_jump_to_next_closest_mark(self, sender):
-        pass
+        current_position=gui_py.current_position()
+
+        if current_position is None:
+            current_position=0
+
+        next_closest_mark=gui_py.next_closest_mark(current_position)
+
+        if next_closest_mark is not None:
+            self._focused_mark=next_closest_mark
+            gui_py.jump_to_frame(next_closest_mark.frame_offset)
     def marks_jump_to_previous_mark(self, sender):
-        pass
+        if self._focused_mark is not None:
+            previous_mark=gui_py.previous_closest_mark(self._focused_mark.frame_offset)
+
+            if previous_mark is not None:
+                self._focused_mark=previous_mark
+                gui_py.jump_to_frame(previous_mark.frame_offset)
+        else:
+            self.marks_jump_to_previous_closest_mark(None)
     def marks_jump_to_previous_closest_mark(self, sender):
-        pass
+        current_position=gui_py.current_position()
+
+        if current_position is None:
+            return
+
+        previous_closest_mark=gui_py.previous_closest_mark(current_position)
+
+        if previous_closest_mark is not None:
+            self._focused_mark=previous_closest_mark
+            gui_py.jump_to_frame(previous_closest_mark.frame_offset)
 
     def marks_jump_to_focused_mark(self, sender):
-        pass
+        if self._focused_mark is not None:
+            gui_py.jump_to_frame(self._focused_mark.frame_offset)
 
     def marks_edit_focused_mark_label(self, sender):
         pass
     def marks_edit_focused_mark_move_to_current_position(self, sender):
-        pass
+        if self._focused_mark is not None:
+            current_position=gui_py.current_position()
+
+            if current_position is not None:
+                self._focused_mark.frame_offset=current_position
+                gui_py.edit_mark(self._focused_frame.id, self._focused_frame)
     def marks_edit_focused_mark_delete(self, sender):
-        pass
+        if self._focused_mark is not None:
+            gui_py.delete_mark(self._focused_mark.id)
+            self._focused_mark=None
 
     def marks_view(self, sender):
         pass

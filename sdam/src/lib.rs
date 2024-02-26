@@ -217,7 +217,7 @@ impl Sdam {
     pub fn edit_mark(&mut self, mark_id: u64, updated_mark: Mark) {
         self.audio_handler.do_send(EditMark {id: mark_id, updated_mark});
         }
-    pub fn remove_mark(&mut self, mark_id: u64) {
+    pub fn delete_mark(&mut self, mark_id: u64) {
         self.audio_handler.do_send(DeleteMark {id: mark_id});
         }
     pub fn set_rate(&mut self, rate: f64) {
