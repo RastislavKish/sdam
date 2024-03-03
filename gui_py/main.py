@@ -687,15 +687,27 @@ class SdamWindow(MainWindow):
         if self._focused_mark is not None:
             gui_py.jump_to_frame(self._focused_mark.frame_offset)
 
-    def marks_edit_focused_mark_label(self, sender):
-        pass
+    async def marks_edit_focused_mark_label(self, sender):
+        if self._focused_mark is not None:
+            original_label=self._focused_mark.label
+            new_label=await self.input_dialog("Set label", f"Set label of mark \"{original_label}\" to:")
+
+            if new_label is None:
+                return
+
+            if new_label=="":
+                new_label=None
+
+            self._focused_mark.label=new_label
+
+            gui_py.edit_mark(self._focused_mark.id, self._focused_mark)
     def marks_edit_focused_mark_move_to_current_position(self, sender):
         if self._focused_mark is not None:
             current_position=gui_py.current_position()
 
             if current_position is not None:
                 self._focused_mark.frame_offset=current_position
-                gui_py.edit_mark(self._focused_frame.id, self._focused_frame)
+                gui_py.edit_mark(self._focused_mark.id, self._focused_mark)
     def marks_edit_focused_mark_delete(self, sender):
         if self._focused_mark is not None:
             gui_py.delete_mark(self._focused_mark.id)
