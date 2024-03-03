@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import asyncio
+from asyncio import Queue
 import re
 import sys
 
@@ -18,10 +20,11 @@ TIME_REGEX=re.compile(r"^(\d*:){,2}\d+$")
 
 class InputDialog(Window):
 
-    def __init__(self, title, message, action):
-        super().__init__(None, title)
+    def __init__(self, title, message, result_queue):
+        super().__init__(None, title, on_close=self.dialog_close_handler)
 
-        self._action=action
+        self._result_queue=result_queue
+        self._submitted=False
 
         box=Box()
 
@@ -36,17 +39,24 @@ class InputDialog(Window):
         self.content=box
 
     async def text_input_confirmation_handler(self, sender):
+        self._submitted=True
         entered_text=self._text_input.value
         self.close()
 
-        if self._action is not None:
-            await self._action(entered_text)
+        if self._result_queue is not None:
+            await self._result_queue.put(entered_text)
     async def ok_button_click_handler(self, sender):
+        self._submitted=True
         entered_text=self._text_input.value
         self.close()
 
-        if self._action is not None:
-            await self._action(entered_text)
+        if self._result_queue is not None:
+            await self._result_queue.put(entered_text)
+
+    async def dialog_close_handler(self, sender):
+        if not self._submitted:
+            await self._result_queue.put(None)
+        return True
 
 class SdamWindow(MainWindow):
 
@@ -549,10 +559,10 @@ class SdamWindow(MainWindow):
     def playback_jump_to_percentage(self, percentage):
         gui_py.jump_to_percentage(percentage)
 
-    def playback_jump_to_time(self, sender):
-        InputDialog("Jump to time", "Enter the time to jump to, in minute, minute:second or hour:minute:second format.", self.jump_time_entrance_handler).show()
-    async def jump_time_entrance_handler(self, text):
-        if text=="":
+    async def playback_jump_to_time(self, sender):
+        text=await self.input_dialog("Jump to time", "Enter the time to jump to, in minute, minute:second or hour:minute:second format.")
+
+        if text is None or text=="":
             return
 
         if not TIME_REGEX.match(text):
@@ -700,6 +710,13 @@ class SdamWindow(MainWindow):
         gui_py.set_user_text(self._text_input.value)
         gui_py.save(path)
         self.title=f"{gui_py.file_name()} - SDAM"
+    async def input_dialog(self, title, text):
+        result_queue=Queue()
+        dialog=InputDialog(title, text, result_queue)
+        dialog.show()
+        result=await result_queue.get()
+
+        return result
 
 class SdamApp(App):
 
