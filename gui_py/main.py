@@ -612,16 +612,21 @@ class SdamWindow(MainWindow):
     def marks_add_category_5_mark(self, sender):
         self.marks_add_mark(5, None)
 
-    def marks_add_labeled_category_1_mark(self, sender):
-        self.marks_add_mark(1, None)
-    def marks_add_labeled_category_2_mark(self, sender):
-        self.marks_add_mark(2, None)
-    def marks_add_labeled_category_3_mark(self, sender):
-        self.marks_add_mark(3, None)
-    def marks_add_labeled_category_4_mark(self, sender):
-        self.marks_add_mark(4, None)
-    def marks_add_labeled_category_5_mark(self, sender):
-        self.marks_add_mark(5, None)
+    async def marks_add_labeled_category_1_mark(self, sender):
+        await self.marks_add_labeled_mark(1)
+    async def marks_add_labeled_category_2_mark(self, sender):
+        await self.marks_add_labeled_mark(2)
+    async def marks_add_labeled_category_3_mark(self, sender):
+        await self.marks_add_labeled_mark(3)
+    async def marks_add_labeled_category_4_mark(self, sender):
+        await self.marks_add_labeled_mark(4)
+    async def marks_add_labeled_category_5_mark(self, sender):
+        await self.marks_add_labeled_mark(5)
+    async def marks_add_labeled_mark(self, category):
+        label=await self.input_dialog("Add mark", f"Add a category {category} mark with label:")
+
+        if label is not None:
+            self.marks_add_mark(category, label)
 
     def marks_add_mark(self, category, label):
         position=None
@@ -632,6 +637,9 @@ class SdamWindow(MainWindow):
             position=gui_py.audio_len()
         else:
             position=gui_py.current_position()
+
+        if position is None:
+            return
 
         gui_py.add_mark(PyMark(position, category, label))
 
