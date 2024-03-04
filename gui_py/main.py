@@ -9,7 +9,7 @@ import toga
 
 from toga import App, MainWindow, Window
 from toga import Group, Command
-from toga import Box, Button, Label, MultilineTextInput, TextInput
+from toga import Box, Button, Label, MultilineTextInput, Table, TextInput
 from toga.style.pack import COLUMN, LEFT, RIGHT, ROW, Pack
 from toga import Key
 
@@ -57,6 +57,144 @@ class InputDialog(Window):
         if not self._submitted:
             await self._result_queue.put(None)
         return True
+
+class ViewMarksWindow(Window):
+
+    def __init__(self, result_queue=None):
+        super().__init__(None, "Marks", on_close=self.window_close_handler)
+
+        self._submitted=False
+        self._result_queue=result_queue
+
+        table=Table(
+            headings=["Mark", "Category", "Time"],
+            data=[],
+            on_activate=self.table_activate_handler,
+            )
+        self._table=table
+
+        control_bar=Box()
+        control_bar.add(Button("Jump to", on_press=self.jump_to_button_press_handler))
+        control_bar.add(Button("Set label", on_press=self.set_label_button_press_handler))
+        control_bar.add(Button("Delete", on_press=self.delete_button_press_handler))
+
+        content=Box()
+        content.add(table)
+        content.add(control_bar)
+        content.style.update(direction=COLUMN, padding=10)
+
+        self.content=content
+
+        self.populate_table()
+
+    async def jump_to_button_press_handler(self, sender):
+        mark=self.get_selected_mark()
+
+        if mark is None:
+            return
+
+        await self.jump_to_mark(mark)
+    async def set_label_button_press_handler(self, sender):
+        mark=self.get_selected_mark()
+
+        if mark is None:
+            return
+
+        new_label=await self.input_dialog("Set label", f"Set label of mark \"{mark.label}\" to:")
+
+        if new_label is None:
+            return
+        if new_label=="":
+            new_label=None
+
+        mark.label=new_label
+        gui_py.edit_mark(mark.id, mark)
+
+        self.populate_table()
+    def delete_button_press_handler(self, sender):
+        mark=self.get_selected_mark()
+
+        if mark is None:
+            return
+
+        gui_py.delete_mark(mark.id)
+
+        self.populate_table()
+
+    async def table_activate_handler(self, sender, **row):
+        if not "row" in row:
+            return
+
+        index=self._table.data.index(row["row"])
+        mark=self._marks[index]
+
+        await self.jump_to_mark(mark)
+    async def window_close_handler(self, sender):
+        if not self._submitted and self._result_queue is not None:
+            await self._result_queue.put(None)
+        return True
+
+    def populate_table(self):
+        self._marks=gui_py.marks()
+        self._marks.sort(key=lambda mark: mark.frame_offset)
+
+        table_data=[]
+        for mark in self._marks:
+            data_entry=(mark.label, mark.category, self._frame_offset_to_time(mark.frame_offset))
+            table_data.append(data_entry)
+
+        self._table.data=table_data
+    async def jump_to_mark(self, mark):
+        if self._result_queue is not None:
+            self._submitted=True
+            self.close()
+            await self._result_queue.put(mark)
+
+    async def input_dialog(self, title, text):
+        result_queue=Queue()
+        dialog=InputDialog(title, text, result_queue)
+        dialog.show()
+        result=await result_queue.get()
+
+        return result
+
+    def _frame_offset_to_time(self, frame_offset):
+        frame_duration=40 #ms
+        frames_in_minute=60000//frame_duration
+        frames_in_second=1000//frame_duration
+
+        minute=frame_offset//frames_in_minute
+        second=(frame_offset%frames_in_minute)//frames_in_second
+
+        return f"{minute:0>2}:{second:0>2}"
+    def get_selected_index(self):
+        selection=self._table.selection
+
+        if selection is None:
+            return None
+
+        index=self._table.data.index(selection)
+
+        return index
+    def get_selected_mark(self):
+        index=self.get_selected_index()
+
+        if index is None:
+            return None
+
+        mark=self._marks[index]
+
+        return mark
+
+    async def show_for_result():
+        result_queue=Queue()
+
+        window=ViewMarksWindow(result_queue)
+        window.show()
+
+        result=await result_queue.get()
+
+        return result
 
 class SdamWindow(MainWindow):
 
@@ -713,8 +851,17 @@ class SdamWindow(MainWindow):
             gui_py.delete_mark(self._focused_mark.id)
             self._focused_mark=None
 
-    def marks_view(self, sender):
-        pass
+    async def marks_view(self, sender):
+        mark_to_focus=await ViewMarksWindow.show_for_result()
+
+        if mark_to_focus is not None:
+            self._focused_mark=mark_to_focus
+            self.marks_jump_to_focused_mark(None)
+            return
+
+        # If a mark was focused before, we need to update it in case it was modified
+        if self._focused_mark is not None:
+            self._focused_mark=gui_py.get_mark(self._focused_mark.id)
 
     def load_from_file(self, path):
         result=gui_py.load(path)

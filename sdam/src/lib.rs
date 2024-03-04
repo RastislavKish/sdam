@@ -183,6 +183,13 @@ impl Sdam {
 
         result_receiver.recv().unwrap()
         }
+    pub fn marks(&mut self) -> Vec<Mark> {
+        let (result_sender, result_receiver)=mpsc::channel::<Vec<Mark>>();
+
+        self.audio_handler.do_send(GetMarks {result_sender});
+
+        result_receiver.recv().unwrap()
+        }
     pub fn next_closest_mark(&mut self, frame: usize) -> Option<Mark> {
         let (result_sender, result_receiver)=mpsc::channel::<Option<Mark>>();
 
@@ -514,6 +521,12 @@ pub struct GetIsRecording {
 pub struct GetMark {
     id: u64,
     result_sender: mpsc::Sender<Option<Mark>>,
+    }
+
+#[derive(Message)]
+#[rtype(result="()")]
+pub struct GetMarks {
+    result_sender: mpsc::Sender<Vec<Mark>>,
     }
 
 #[derive(Message)]
@@ -902,6 +915,13 @@ impl Handler<GetMark> for AudioHandler {
             msg.result_sender.send(Some(mark.clone())).unwrap();
             return;
             }
+        }
+    }
+impl Handler<GetMarks> for AudioHandler {
+    type Result=();
+
+    fn handle(&mut self, msg: GetMarks, _ctx: &mut Context<Self>) -> Self::Result {
+        msg.result_sender.send(self.mark_manager.get_mark_list().to_vec()).unwrap();
         }
     }
 impl Handler<GetNextClosestMark> for AudioHandler {

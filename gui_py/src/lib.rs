@@ -212,6 +212,16 @@ fn get_mark(id: u64) -> PyResult<Option<PyMark>> {
     Ok(None)
     }
 #[pyfunction]
+fn marks() -> PyResult<Vec<PyMark>> {
+    let mut sdam=SDAM.lock().unwrap();
+    let marks=sdam.marks();
+    let pymarks: Vec<PyMark>=marks.into_iter()
+    .map(|mark| PyMark::from_mark(&mark))
+    .collect();
+
+    Ok(pymarks)
+    }
+#[pyfunction]
 fn next_closest_mark(frame: usize) -> PyResult<Option<PyMark>> {
     let mut sdam=SDAM.lock().unwrap();
     if let Some(mark)=sdam.next_closest_mark(frame) {
@@ -299,6 +309,7 @@ fn gui_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_paused, m)?)?;
     m.add_function(wrap_pyfunction!(is_recording, m)?)?;
     m.add_function(wrap_pyfunction!(get_mark, m)?)?;
+    m.add_function(wrap_pyfunction!(marks, m)?)?;
     m.add_function(wrap_pyfunction!(next_closest_mark, m)?)?;
     m.add_function(wrap_pyfunction!(previous_closest_mark, m)?)?;
     m.add_function(wrap_pyfunction!(user_text, m)?)?;
