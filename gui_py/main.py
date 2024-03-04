@@ -58,6 +58,14 @@ class InputDialog(Window):
             await self._result_queue.put(None)
         return True
 
+    async def show_for_result(title, text):
+        result_queue=Queue()
+        dialog=InputDialog(title, text, result_queue)
+        dialog.show()
+        result=await result_queue.get()
+
+        return result
+
 class ViewMarksWindow(Window):
 
     def __init__(self, result_queue=None):
@@ -151,12 +159,7 @@ class ViewMarksWindow(Window):
             await self._result_queue.put(mark)
 
     async def input_dialog(self, title, text):
-        result_queue=Queue()
-        dialog=InputDialog(title, text, result_queue)
-        dialog.show()
-        result=await result_queue.get()
-
-        return result
+        return await InputDialog.show_for_result(title, text)
 
     def _frame_offset_to_time(self, frame_offset):
         frame_duration=40 #ms
@@ -878,12 +881,7 @@ class SdamWindow(MainWindow):
         gui_py.save(path)
         self.title=f"{gui_py.file_name()} - SDAM"
     async def input_dialog(self, title, text):
-        result_queue=Queue()
-        dialog=InputDialog(title, text, result_queue)
-        dialog.show()
-        result=await result_queue.get()
-
-        return result
+        return await InputDialog.show_for_result(title, text)
 
 class SdamApp(App):
 
