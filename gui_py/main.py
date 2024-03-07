@@ -74,10 +74,15 @@ class ViewMarksWindow(Window):
         gui_py.edit_mark(mark.id, mark)
 
         self.populate_table()
-    def delete_button_press_handler(self, sender):
+    async def delete_button_press_handler(self, sender):
         mark=self.get_selected_mark()
 
         if mark is None:
+            return
+
+        confirmation=await self.question_dialog("Confirmation", f"Are you sure you want to delete mark \"{mark.label}\" of category {mark.category} at {frame_offset_to_time(mark.frame_offset)}?")
+
+        if confirmation is False:
             return
 
         gui_py.delete_mark(mark.id)
