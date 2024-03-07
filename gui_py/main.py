@@ -16,63 +16,10 @@ from toga import Key
 import gui_py
 from gui_py import PyMark
 
+import util
+from util import frame_offset_to_time, input_dialog, Toaster
+
 TIME_REGEX=re.compile(r"^(\d*:){,2}\d+$")
-
-class Toaster:
-
-    def __init__(self, label):
-        self._label=label
-
-    def toast(self, text):
-        self._label.text=text
-
-class InputDialog(Window):
-
-    def __init__(self, title, message, result_queue):
-        super().__init__(None, title, on_close=self.dialog_close_handler)
-
-        self._result_queue=result_queue
-        self._submitted=False
-
-        box=Box()
-
-        input_box=Box()
-        self._text_input=TextInput(on_confirm=self.text_input_confirmation_handler)
-        input_box.add(self._text_input)
-        input_box.add(Button("Ok", on_press=self.ok_button_click_handler))
-        box.add(Label(message))
-        box.add(input_box)
-        box.style.update(direction=COLUMN, padding=10)
-
-        self.content=box
-
-    async def text_input_confirmation_handler(self, sender):
-        self._submitted=True
-        entered_text=self._text_input.value
-        self.close()
-
-        if self._result_queue is not None:
-            await self._result_queue.put(entered_text)
-    async def ok_button_click_handler(self, sender):
-        self._submitted=True
-        entered_text=self._text_input.value
-        self.close()
-
-        if self._result_queue is not None:
-            await self._result_queue.put(entered_text)
-
-    async def dialog_close_handler(self, sender):
-        if not self._submitted:
-            await self._result_queue.put(None)
-        return True
-
-    async def show_for_result(title, text):
-        result_queue=Queue()
-        dialog=InputDialog(title, text, result_queue)
-        dialog.show()
-        result=await result_queue.get()
-
-        return result
 
 class ViewMarksWindow(Window):
 
@@ -116,7 +63,7 @@ class ViewMarksWindow(Window):
         if mark is None:
             return
 
-        new_label=await self.input_dialog("Set label", f"Set label of mark \"{mark.label}\" to:")
+        new_label=await input_dialog("Set label", f"Set label of mark \"{mark.label}\" to:")
 
         if new_label is None:
             return
@@ -156,7 +103,7 @@ class ViewMarksWindow(Window):
 
         table_data=[]
         for mark in self._marks:
-            data_entry=(mark.label, mark.category, self._frame_offset_to_time(mark.frame_offset))
+            data_entry=(mark.label, mark.category, frame_offset_to_time(mark.frame_offset))
             table_data.append(data_entry)
 
         self._table.data=table_data
@@ -166,18 +113,6 @@ class ViewMarksWindow(Window):
             self.close()
             await self._result_queue.put(mark)
 
-    async def input_dialog(self, title, text):
-        return await InputDialog.show_for_result(title, text)
-
-    def _frame_offset_to_time(self, frame_offset):
-        frame_duration=40 #ms
-        frames_in_minute=60000//frame_duration
-        frames_in_second=1000//frame_duration
-
-        minute=frame_offset//frames_in_minute
-        second=(frame_offset%frames_in_minute)//frames_in_second
-
-        return f"{minute:0>2}:{second:0>2}"
     def get_selected_index(self):
         selection=self._table.selection
 
@@ -736,7 +671,7 @@ class SdamWindow(MainWindow):
         gui_py.jump_to_percentage(percentage)
 
     async def playback_jump_to_time(self, sender):
-        text=await self.input_dialog("Jump to time", "Enter the time to jump to, in minute, minute:second or hour:minute:second format.")
+        text=await input_dialog("Jump to time", "Enter the time to jump to, in minute, minute:second or hour:minute:second format.")
 
         if text is None or text=="":
             return
@@ -803,7 +738,7 @@ class SdamWindow(MainWindow):
     async def marks_add_labeled_category_5_mark(self, sender):
         await self.marks_add_labeled_mark(5)
     async def marks_add_labeled_mark(self, category):
-        label=await self.input_dialog("Add mark", f"Add a category {category} mark with label:")
+        label=await input_dialog("Add mark", f"Add a category {category} mark with label:")
 
         if label is not None:
             self.marks_add_mark(category, label)
@@ -872,7 +807,7 @@ class SdamWindow(MainWindow):
     async def marks_edit_focused_mark_label(self, sender):
         if self._focused_mark is not None:
             original_label=self._focused_mark.label
-            new_label=await self.input_dialog("Set label", f"Set label of mark \"{original_label}\" to:")
+            new_label=await input_dialog("Set label", f"Set label of mark \"{original_label}\" to:")
 
             if new_label is None:
                 return
@@ -917,7 +852,7 @@ class SdamWindow(MainWindow):
 
         audio_len=gui_py.audio_len()
 
-        self._current_position_label.text=f"{self._frame_offset_to_time(current_position)} / {self._frame_offset_to_time(audio_len)}"
+        self._current_position_label.text=f"{frame_offset_to_time(current_position)} / {frame_offset_to_time(audio_len)}"
 
     def load_from_file(self, path):
         result=gui_py.load(path)
@@ -933,17 +868,6 @@ class SdamWindow(MainWindow):
         gui_py.set_user_text(self._text_input.value)
         gui_py.save(path)
         self.title=f"{gui_py.file_name()} - SDAM"
-    async def input_dialog(self, title, text):
-        return await InputDialog.show_for_result(title, text)
-    def _frame_offset_to_time(self, frame_offset):
-        frame_duration=40 #ms
-        frames_in_minute=60000//frame_duration
-        frames_in_second=1000//frame_duration
-
-        minute=frame_offset//frames_in_minute
-        second=(frame_offset%frames_in_minute)//frames_in_second
-
-        return f"{minute:0>2}:{second:0>2}"
 
 class SdamApp(App):
 
