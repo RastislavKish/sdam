@@ -853,6 +853,8 @@ class SdamWindow(MainWindow):
         audio_len=gui_py.audio_len()
 
         self._current_position_label.text=f"{frame_offset_to_time(current_position)} / {frame_offset_to_time(audio_len)}"
+    def release(self):
+        self._toaster.release()
 
     def load_from_file(self, path):
         result=gui_py.load(path)
@@ -872,7 +874,7 @@ class SdamWindow(MainWindow):
 class SdamApp(App):
 
     def __init__(self):
-        super().__init__("SDAM", "com.rastislavkish.sdam")
+        super().__init__("SDAM", "com.rastislavkish.sdam", on_exit=self.app_exit_handler)
 
     def startup(self):
         sdam_window=SdamWindow()
@@ -888,6 +890,10 @@ class SdamApp(App):
     def timer_executor(self):
         self.main_window.timer()
         self.loop.call_later(5, self.timer_executor)
+
+    def app_exit_handler(self, sender):
+        self.main_window.release()
+        return True
 
 if __name__=="__main__":
     app=SdamApp()
