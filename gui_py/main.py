@@ -18,6 +18,14 @@ from gui_py import PyMark
 
 TIME_REGEX=re.compile(r"^(\d*:){,2}\d+$")
 
+class Toaster:
+
+    def __init__(self, label):
+        self._label=label
+
+    def toast(self, text):
+        self._label.text=text
+
 class InputDialog(Window):
 
     def __init__(self, title, message, result_queue):
@@ -596,8 +604,27 @@ class SdamWindow(MainWindow):
             marks_edit_focused_mark_delete,
             marks_view,
             )
-        self._text_input=MultilineTextInput()
-        self.content=self._text_input
+
+        content=Box()
+
+        text_input=MultilineTextInput()
+        self._text_input=text_input
+
+        status_bar=Box()
+        current_position_label=Label("")
+        self._current_position_label=current_position_label
+        toast_label=Label("")
+        self._toaster=Toaster(toast_label)
+
+        status_bar.add(current_position_label)
+        status_bar.add(toast_label)
+
+        content.add(text_input)
+        content.add(status_bar)
+
+        content.style.update(direction=COLUMN, padding=10)
+
+        self.content=content
 
         self._text_input.focus()
 
@@ -622,12 +649,20 @@ class SdamWindow(MainWindow):
             print("Starting recording...")
             gui_py.pause_playback()
             gui_py.start_recording()
+
+            if gui_py.is_recording():
+                self._toaster.toast("Recording")
     def recording_stop(self, sender):
         if not self._time_travel:
             gui_py.stop_recording()
+            if not gui_py.is_recording():
+                self._toaster.toast("Recording stopped")
         else:
             self._recording_before_time_travel=False
             self.time_travel_deactivate(None)
+
+            if not gui_py.is_recording():
+                self._toaster.toast("Recording stopped, Timetravel stopped")
 
     def playback_toggle(self, sender):
         if gui_py.is_recording() and not self._time_travel and not gui_py.is_playing():
@@ -735,12 +770,16 @@ class SdamWindow(MainWindow):
 
             self._recording_before_time_travel=recording
             self._time_travel=True
+
+            self._toaster.toast("Timetravel activated")
     def time_travel_deactivate(self, sender):
         if self._time_travel:
             gui_py.pause_playback()
             if not self._recording_before_time_travel:
                 gui_py.stop_recording()
             self._time_travel=False
+
+            self._toaster.toast("Timetravel deactivated")
 
     def marks_add_category_1_mark(self, sender):
         self.marks_add_mark(1, None)
@@ -783,6 +822,8 @@ class SdamWindow(MainWindow):
             return
 
         gui_py.add_mark(PyMark(position, category, label))
+
+        self._toaster.toast("Mark added")
 
     def marks_jump_to_next_mark(self, sender):
         if self._focused_mark is not None:
@@ -849,10 +890,12 @@ class SdamWindow(MainWindow):
             if current_position is not None:
                 self._focused_mark.frame_offset=current_position
                 gui_py.edit_mark(self._focused_mark.id, self._focused_mark)
+                self._toaster.toast("Mark moved")
     def marks_edit_focused_mark_delete(self, sender):
         if self._focused_mark is not None:
             gui_py.delete_mark(self._focused_mark.id)
             self._focused_mark=None
+            self._toaster.toast("Mark deleted")
 
     async def marks_view(self, sender):
         mark_to_focus=await ViewMarksWindow.show_for_result()
@@ -865,6 +908,16 @@ class SdamWindow(MainWindow):
         # If a mark was focused before, we need to update it in case it was modified
         if self._focused_mark is not None:
             self._focused_mark=gui_py.get_mark(self._focused_mark.id)
+
+    def timer(self):
+        current_position=gui_py.current_position()
+
+        if current_position is None:
+            current_position=0
+
+        audio_len=gui_py.audio_len()
+
+        self._current_position_label.text=f"{self._frame_offset_to_time(current_position)} / {self._frame_offset_to_time(audio_len)}"
 
     def load_from_file(self, path):
         result=gui_py.load(path)
@@ -882,6 +935,15 @@ class SdamWindow(MainWindow):
         self.title=f"{gui_py.file_name()} - SDAM"
     async def input_dialog(self, title, text):
         return await InputDialog.show_for_result(title, text)
+    def _frame_offset_to_time(self, frame_offset):
+        frame_duration=40 #ms
+        frames_in_minute=60000//frame_duration
+        frames_in_second=1000//frame_duration
+
+        minute=frame_offset//frames_in_minute
+        second=(frame_offset%frames_in_minute)//frames_in_second
+
+        return f"{minute:0>2}:{second:0>2}"
 
 class SdamApp(App):
 
@@ -896,6 +958,12 @@ class SdamApp(App):
 
         if len(sys.argv)==2:
             sdam_window.load_from_file(sys.argv[1])
+
+        self.loop.call_later(1, self.timer_executor)
+
+    def timer_executor(self):
+        self.main_window.timer()
+        self.loop.call_later(5, self.timer_executor)
 
 if __name__=="__main__":
     app=SdamApp()
