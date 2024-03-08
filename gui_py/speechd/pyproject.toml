@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "speechd"
+version = "0.1.0"
+description = "A client interface to Speech Dispatcher"
+authors = ["RastislavKish <rastislav.kish@protonmail.com>", "Brailcom, o.p.s."]
+license = "LGPL-2.1-only"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

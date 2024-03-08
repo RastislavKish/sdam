@@ -16,8 +16,8 @@ from toga import Key
 import gui_py
 from gui_py import PyMark
 
-import util
-from util import frame_offset_to_time, input_dialog, Toaster
+import sdam.util
+from sdam.util import frame_offset_to_time, input_dialog, Toaster
 
 TIME_REGEX=re.compile(r"^(\d*:){,2}\d+$")
 
@@ -900,6 +900,5 @@ class SdamApp(App):
         self.main_window.release()
         return True
 
-if __name__=="__main__":
-    app=SdamApp()
-    app.main_loop()
+def main():
+    return SdamApp()
