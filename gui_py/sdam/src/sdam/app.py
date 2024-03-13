@@ -13,8 +13,8 @@ from toga import Box, Button, Label, MultilineTextInput, Table, TextInput
 from toga.style.pack import COLUMN, LEFT, RIGHT, ROW, Pack
 from toga import Key
 
-import gui_py
-from gui_py import PyMark
+import backend
+from backend import PyMark
 
 import sdam.util
 from sdam.util import frame_offset_to_time, input_dialog, Toaster
@@ -71,7 +71,7 @@ class ViewMarksWindow(Window):
             new_label=None
 
         mark.label=new_label
-        gui_py.edit_mark(mark.id, mark)
+        backend.edit_mark(mark.id, mark)
 
         self.populate_table()
     async def delete_button_press_handler(self, sender):
@@ -85,7 +85,7 @@ class ViewMarksWindow(Window):
         if confirmation is False:
             return
 
-        gui_py.delete_mark(mark.id)
+        backend.delete_mark(mark.id)
 
         self.populate_table()
 
@@ -103,7 +103,7 @@ class ViewMarksWindow(Window):
         return True
 
     def populate_table(self):
-        self._marks=gui_py.marks()
+        self._marks=backend.marks()
         self._marks.sort(key=lambda mark: mark.frame_offset)
 
         table_data=[]
@@ -577,7 +577,7 @@ class SdamWindow(MainWindow):
         if result is not None:
             self.load_from_file(str(result))
     async def save(self, sender):
-        file_path=gui_py.file_path()
+        file_path=backend.file_path()
 
         if file_path=="":
             result=await self.save_file_dialog("Save to file", ".sdam", file_types=["sdam"])
@@ -588,70 +588,70 @@ class SdamWindow(MainWindow):
             self.save_to_file(file_path)
 
     def recording_start(self, sender):
-        if not gui_py.is_recording():
+        if not backend.is_recording():
             print("Starting recording...")
-            gui_py.pause_playback()
-            gui_py.start_recording()
+            backend.pause_playback()
+            backend.start_recording()
 
-            if gui_py.is_recording():
+            if backend.is_recording():
                 self._toaster.toast("Recording")
     def recording_stop(self, sender):
         if not self._time_travel:
-            gui_py.stop_recording()
-            if not gui_py.is_recording():
+            backend.stop_recording()
+            if not backend.is_recording():
                 self._toaster.toast("Recording stopped")
         else:
             self._recording_before_time_travel=False
             self.time_travel_deactivate(None)
 
-            if not gui_py.is_recording():
+            if not backend.is_recording():
                 self._toaster.toast("Recording stopped, Timetravel stopped")
 
     def playback_toggle(self, sender):
-        if gui_py.is_recording() and not self._time_travel and not gui_py.is_playing():
+        if backend.is_recording() and not self._time_travel and not backend.is_playing():
             return
-        gui_py.toggle_playback()
+        backend.toggle_playback()
 
     def playback_rate_original(self, sender):
         self._rate=1.0
 
-        gui_py.set_rate(self._rate)
+        backend.set_rate(self._rate)
     def playback_rate_increase(self, sender):
         self._rate+=0.25
         if self._rate>3.0:
             self._rate=3.0
 
-        gui_py.set_rate(self._rate)
+        backend.set_rate(self._rate)
     def playback_rate_decrease(self, sender):
         self._rate-=0.25
         if self._rate<=0.0:
             self._rate=0.25
 
-        gui_py.set_rate(self._rate)
+        backend.set_rate(self._rate)
     def playback_rate_double(self, sender):
-        gui_py.set_rate(2.0)
+        backend.set_rate(2.0)
     def playback_rate_triple(self, sender):
-        gui_py.set_rate(3.0)
+        backend.set_rate(3.0)
     def playback_rate_half(self, sender):
-        gui_py.set_rate(0.5)
+        backend.set_rate(0.5)
 
     def playback_forward_5_seconds(self, sender):
-        gui_py.forward(5)
+        backend.forward(5)
     def playback_forward_10_seconds(self, sender):
-        gui_py.forward(10)
+        backend.forward(10)
     def playback_forward_1_minute(self, sender):
-        gui_py.forward(60)
+        backend.forward(60)
     def playback_backward_5_seconds(self, sender):
-        gui_py.backward(5)
+        backend.backward(5)
     def playback_backward_10_seconds(self, sender):
-        gui_py.backward(10)
+        backend.backward(10)
     def playback_backward_1_minute(self, sender):
-        gui_py.backward(60)
+        backend.backward(60)
 
     def playback_jump_to_start(self, sender):
-        gui_py.jump_to_start()
+        backend.jump_to_start()
     def playback_jump_to_end(self, sender):
-        gui_py.jump_to_end()
+        backend.jump_to_end()
     def playback_jump_to_percentage_0(self, sender):
         self.playback_jump_to_percentage(0)
     def playback_jump_to_percentage_10(self, sender):
@@ -676,7 +676,7 @@ class SdamWindow(MainWindow):
         self.playback_jump_to_percentage(100)
 
     def playback_jump_to_percentage(self, percentage):
-        gui_py.jump_to_percentage(percentage)
+        backend.jump_to_percentage(percentage)
 
     async def playback_jump_to_time(self, sender):
         text=await input_dialog("Jump to time", "Enter the time to jump to, in minute, minute:second or hour:minute:second format.")
@@ -699,17 +699,17 @@ class SdamWindow(MainWindow):
         elif len(parts)==3:
             seconds=3600*parts[0]+60*parts[1]+parts[2]
 
-        gui_py.jump_to_time(seconds)
+        backend.jump_to_time(seconds)
 
     def time_travel_activate(self, sender):
         if not self._time_travel:
-            recording=gui_py.is_recording()
+            recording=backend.is_recording()
 
-            gui_py.pause_playback()
+            backend.pause_playback()
             if not recording:
-                gui_py.start_recording()
-            gui_py.jump_to_end()
-            gui_py.start_playback()
+                backend.start_recording()
+            backend.jump_to_end()
+            backend.start_playback()
 
             self._recording_before_time_travel=recording
             self._time_travel=True
@@ -717,9 +717,9 @@ class SdamWindow(MainWindow):
             self._toaster.toast("Timetravel activated")
     def time_travel_deactivate(self, sender):
         if self._time_travel:
-            gui_py.pause_playback()
+            backend.pause_playback()
             if not self._recording_before_time_travel:
-                gui_py.stop_recording()
+                backend.stop_recording()
             self._time_travel=False
 
             self._toaster.toast("Timetravel deactivated")
@@ -755,62 +755,62 @@ class SdamWindow(MainWindow):
         position=None
 
         if self._time_travel:
-            position=gui_py.current_position()
-        elif gui_py.is_recording():
-            position=gui_py.audio_len()
+            position=backend.current_position()
+        elif backend.is_recording():
+            position=backend.audio_len()
         else:
-            position=gui_py.current_position()
+            position=backend.current_position()
 
         if position is None:
             return
 
-        gui_py.add_mark(PyMark(position, category, label))
+        backend.add_mark(PyMark(position, category, label))
 
         self._toaster.toast("Mark added")
 
     def marks_jump_to_next_mark(self, sender):
         if self._focused_mark is not None:
-            next_mark=gui_py.next_closest_mark(self._focused_mark.frame_offset)
+            next_mark=backend.next_closest_mark(self._focused_mark.frame_offset)
             if next_mark is not None:
                 self._focused_mark=next_mark
-                gui_py.jump_to_frame(next_mark.frame_offset)
+                backend.jump_to_frame(next_mark.frame_offset)
         else:
             self.marks_jump_to_next_closest_mark(None)
     def marks_jump_to_next_closest_mark(self, sender):
-        current_position=gui_py.current_position()
+        current_position=backend.current_position()
 
         if current_position is None:
             current_position=0
 
-        next_closest_mark=gui_py.next_closest_mark(current_position)
+        next_closest_mark=backend.next_closest_mark(current_position)
 
         if next_closest_mark is not None:
             self._focused_mark=next_closest_mark
-            gui_py.jump_to_frame(next_closest_mark.frame_offset)
+            backend.jump_to_frame(next_closest_mark.frame_offset)
     def marks_jump_to_previous_mark(self, sender):
         if self._focused_mark is not None:
-            previous_mark=gui_py.previous_closest_mark(self._focused_mark.frame_offset)
+            previous_mark=backend.previous_closest_mark(self._focused_mark.frame_offset)
 
             if previous_mark is not None:
                 self._focused_mark=previous_mark
-                gui_py.jump_to_frame(previous_mark.frame_offset)
+                backend.jump_to_frame(previous_mark.frame_offset)
         else:
             self.marks_jump_to_previous_closest_mark(None)
     def marks_jump_to_previous_closest_mark(self, sender):
-        current_position=gui_py.current_position()
+        current_position=backend.current_position()
 
         if current_position is None:
             return
 
-        previous_closest_mark=gui_py.previous_closest_mark(current_position)
+        previous_closest_mark=backend.previous_closest_mark(current_position)
 
         if previous_closest_mark is not None:
             self._focused_mark=previous_closest_mark
-            gui_py.jump_to_frame(previous_closest_mark.frame_offset)
+            backend.jump_to_frame(previous_closest_mark.frame_offset)
 
     def marks_jump_to_focused_mark(self, sender):
         if self._focused_mark is not None:
-            gui_py.jump_to_frame(self._focused_mark.frame_offset)
+            backend.jump_to_frame(self._focused_mark.frame_offset)
 
     async def marks_edit_focused_mark_label(self, sender):
         if self._focused_mark is not None:
@@ -825,18 +825,18 @@ class SdamWindow(MainWindow):
 
             self._focused_mark.label=new_label
 
-            gui_py.edit_mark(self._focused_mark.id, self._focused_mark)
+            backend.edit_mark(self._focused_mark.id, self._focused_mark)
     def marks_edit_focused_mark_move_to_current_position(self, sender):
         if self._focused_mark is not None:
-            current_position=gui_py.current_position()
+            current_position=backend.current_position()
 
             if current_position is not None:
                 self._focused_mark.frame_offset=current_position
-                gui_py.edit_mark(self._focused_mark.id, self._focused_mark)
+                backend.edit_mark(self._focused_mark.id, self._focused_mark)
                 self._toaster.toast("Mark moved")
     def marks_edit_focused_mark_delete(self, sender):
         if self._focused_mark is not None:
-            gui_py.delete_mark(self._focused_mark.id)
+            backend.delete_mark(self._focused_mark.id)
             self._focused_mark=None
             self._toaster.toast("Mark deleted")
 
@@ -850,34 +850,34 @@ class SdamWindow(MainWindow):
 
         # If a mark was focused before, we need to update it in case it was modified
         if self._focused_mark is not None:
-            self._focused_mark=gui_py.get_mark(self._focused_mark.id)
+            self._focused_mark=backend.get_mark(self._focused_mark.id)
 
     def timer(self):
-        current_position=gui_py.current_position()
+        current_position=backend.current_position()
 
         if current_position is None:
             current_position=0
 
-        audio_len=gui_py.audio_len()
+        audio_len=backend.audio_len()
 
         self._current_position_label.text=f"{frame_offset_to_time(current_position)} / {frame_offset_to_time(audio_len)}"
     def release(self):
         self._toaster.release()
 
     def load_from_file(self, path):
-        result=gui_py.load(path)
+        result=backend.load(path)
 
         if result!="":
             self.error_dialog("Error", result)
             return
 
-        self._text_input.value=gui_py.user_text()
+        self._text_input.value=backend.user_text()
 
-        self.title=f"{gui_py.file_name()} - SDAM"
+        self.title=f"{backend.file_name()} - SDAM"
     def save_to_file(self, path):
-        gui_py.set_user_text(self._text_input.value)
-        gui_py.save(path)
-        self.title=f"{gui_py.file_name()} - SDAM"
+        backend.set_user_text(self._text_input.value)
+        backend.save(path)
+        self.title=f"{backend.file_name()} - SDAM"
 
 class SdamApp(App):
 

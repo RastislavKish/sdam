@@ -275,7 +275,7 @@ fn set_user_text(text: &str) {
     }
 
 #[pymodule]
-fn gui_py(_py: Python, m: &PyModule) -> PyResult<()> {
+fn backend(_py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyMark>()?;
 

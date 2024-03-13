@@ -21,9 +21,10 @@ test_sources = [
     "tests",
 ]
 
-requires = ["../wheels/gui_py-0.1.0-cp310-cp310-manylinux_2_34_x86_64.whl",
-"psutil",
-"../wheels/toga_core-0.4.3.dev285+g83b9d0bd9-py3-none-any.whl",
+requires = [
+    "../backend",
+    "psutil",
+    "../toga/core",
 ]
 test_requires = [    "pytest",]
 
@@ -38,8 +39,9 @@ requires = [
 
 [tool.briefcase.app.sdam.linux]
 requires = [
-"../wheels/speechd-0.1.0-py3-none-any.whl",
-    "../wheels/toga_gtk-0.4.3.dev285+g83b9d0bd9-py3-none-any.whl",
+
+    "../speechd",
+    "../toga/gtk",
 ]
 
 
@@ -161,8 +163,9 @@ flatpak_sdk = "org.gnome.Sdk"
 
 [tool.briefcase.app.sdam.windows]
 requires = [
-"cytolk=0.1.13",
-    "toga-winforms~=0.4.0",
+    "../wheels/gui_py-0.1.0-cp311-none-win_amd64.whl",
+    "cytolk~=0.1.13",
+    "../toga/winforms",
 ]
 
 
