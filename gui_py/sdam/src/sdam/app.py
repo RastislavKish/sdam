@@ -292,71 +292,73 @@ class SdamWindow(MainWindow):
 
         playback_jump_to_start=Command(self.playback_jump_to_start,
             text="Start",
+            shortcut=Key.MOD_1+Key.SHIFT+Key.H,
             group=jump_to_group,
             order=1,
             )
         playback_jump_to_end=Command(self.playback_jump_to_end,
             text="End",
+            shortcut=Key.MOD_1+Key.COLON,
             group=jump_to_group,
             order=2,
             )
         playback_jump_to_percentage_0=Command(self.playback_jump_to_percentage_0,
             text="0%",
-            shortcut=Key.MOD_1+"0",
+            shortcut=Key.MOD_1+Key._0,
             group=percentage_group,
             order=1,
             )
         playback_jump_to_percentage_10=Command(self.playback_jump_to_percentage_10,
             text="10%",
-            shortcut=Key.MOD_1+"1",
+            shortcut=Key.MOD_1+Key._1,
             group=percentage_group,
             order=2,
             )
         playback_jump_to_percentage_20=Command(self.playback_jump_to_percentage_20,
             text="20%",
-            shortcut=Key.MOD_1+"2",
+            shortcut=Key.MOD_1+Key._2,
             group=percentage_group,
             order=3,
             )
         playback_jump_to_percentage_30=Command(self.playback_jump_to_percentage_30,
             text="30%",
-            shortcut=Key.MOD_1+"3",
+            shortcut=Key.MOD_1+Key._3,
             group=percentage_group,
             order=4,
             )
         playback_jump_to_percentage_40=Command(self.playback_jump_to_percentage_40,
             text="40%",
-            shortcut=Key.MOD_1+"4",
+            shortcut=Key.MOD_1+Key._4,
             group=percentage_group,
             order=5,
             )
         playback_jump_to_percentage_50=Command(self.playback_jump_to_percentage_50,
             text="50%",
-            shortcut=Key.MOD_1+"5",
+            shortcut=Key.MOD_1+Key._5,
             group=percentage_group,
             order=6,
             )
         playback_jump_to_percentage_60=Command(self.playback_jump_to_percentage_60,
             text="60%",
-            shortcut=Key.MOD_1+"6",
+            shortcut=Key.MOD_1+Key._6,
             group=percentage_group,
             order=7,
             )
         playback_jump_to_percentage_70=Command(self.playback_jump_to_percentage_70,
             text="70%",
-            shortcut=Key.MOD_1+"7",
+            shortcut=Key.MOD_1+Key._7,
             group=percentage_group,
             order=8,
             )
         playback_jump_to_percentage_80=Command(self.playback_jump_to_percentage_80,
             text="80%",
-            shortcut=Key.MOD_1+"8",
+            shortcut=Key.MOD_1+Key._8,
             group=percentage_group,
             order=9,
             )
         playback_jump_to_percentage_90=Command(self.playback_jump_to_percentage_90,
             text="90%",
-            shortcut=Key.MOD_1+"9",
+            shortcut=Key.MOD_1+Key._9,
             group=percentage_group,
             order=10,
             )
@@ -367,71 +369,71 @@ class SdamWindow(MainWindow):
             )
         playback_jump_to_time=Command(self.playback_jump_to_time,
             text="Time",
-            shortcut=Key.MOD_1+Key.MOD_2+Key.T,
+            shortcut=Key.MOD_1+Key.T,
             group=jump_to_group,
             order=4,
             )
 
         time_travel_activate=Command(self.time_travel_activate,
             text="Activate",
-            shortcut=Key.MOD_1+Key.T,
+            shortcut=Key.MOD_2+Key.T,
             group=time_travel_group,
             )
         time_travel_deactivate=Command(self.time_travel_deactivate,
             text="Deactivate",
-            shortcut=Key.MOD_1+Key.SHIFT+Key.T,
+            shortcut=Key.MOD_2+Key.SHIFT+Key.T,
             group=time_travel_group,
             )
 
         marks_add_category_1_mark=Command(self.marks_add_category_1_mark,
             text="Category 1 mark",
-            shortcut=Key.MOD_2+"1",
+            shortcut=Key.MOD_2+Key._1,
             group=marks_add_group,
             )
         marks_add_category_2_mark=Command(self.marks_add_category_2_mark,
             text="Category 2 mark",
-            shortcut=Key.MOD_2+"2",
+            shortcut=Key.MOD_2+Key._2,
             group=marks_add_group,
             )
         marks_add_category_3_mark=Command(self.marks_add_category_3_mark,
             text="Category 3 mark",
-            shortcut=Key.MOD_2+"3",
+            shortcut=Key.MOD_2+Key._3,
             group=marks_add_group,
             )
         marks_add_category_4_mark=Command(self.marks_add_category_4_mark,
             text="Category 4 mark",
-            shortcut=Key.MOD_2+"4",
+            shortcut=Key.MOD_2+Key._4,
             group=marks_add_group,
             )
         marks_add_category_5_mark=Command(self.marks_add_category_5_mark,
             text="Category 5 mark",
-            shortcut=Key.MOD_2+"5",
+            shortcut=Key.MOD_2+Key._5,
             group=marks_add_group,
             )
 
         marks_add_labeled_category_1_mark=Command(self.marks_add_labeled_category_1_mark,
             text="Category 1 mark",
-            shortcut=Key.MOD_1+Key.MOD_2+"1",
+            shortcut=Key.MOD_2+Key.EXCLAMATION,
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_2_mark=Command(self.marks_add_labeled_category_2_mark,
             text="Category 2 mark",
-            shortcut=Key.MOD_1+Key.MOD_2+"2",
+            shortcut=Key.MOD_2+Key.AT,
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_3_mark=Command(self.marks_add_labeled_category_3_mark,
             text="Category 3 mark",
-            shortcut=Key.MOD_1+Key.MOD_2+"3",
+            shortcut=Key.MOD_2+Key.HASH,
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_4_mark=Command(self.marks_add_labeled_category_4_mark,
             text="Category 4 mark",
-            shortcut=Key.MOD_1+Key.MOD_2+"4",
+            shortcut=Key.MOD_2+Key.DOLLAR,
             group=marks_add_labeled_group,
             )
         marks_add_labeled_category_5_mark=Command(self.marks_add_labeled_category_5_mark,
             text="Category 5 mark",
-            shortcut=Key.MOD_1+Key.MOD_2+"5",
+            shortcut=Key.MOD_2+Key.PERCENT,
             group=marks_add_labeled_group,
             )
 
@@ -443,7 +445,7 @@ class SdamWindow(MainWindow):
             )
         marks_jump_to_next_closest_mark=Command(self.marks_jump_to_next_closest_mark,
             text="Next closest mark",
-            shortcut=Key.MOD_1+Key.SHIFT+".",
+            shortcut=Key.MOD_1+">",
             order=2,
             group=marks_jump_to_group,
             )
@@ -468,7 +470,7 @@ class SdamWindow(MainWindow):
 
         marks_edit_focused_mark_label=Command(self.marks_edit_focused_mark_label,
             text="Label",
-            shortcut=Key.MOD_1+Key.SHIFT+Key.COMMA,
+            shortcut=Key.MOD_1+"<",
             order=1,
             group=marks_edit_focused_mark_group,
             )
@@ -480,13 +482,14 @@ class SdamWindow(MainWindow):
             )
         marks_edit_focused_mark_delete=Command(self.marks_edit_focused_mark_delete,
             text="Delete",
-            shortcut=Key.MOD_1+Key.MOD_2+Key.SHIFT+Key.COMMA,
+            shortcut=Key.MOD_1+Key.MOD_2+"<",
             order=3,
             group=marks_edit_focused_mark_group,
             )
 
         marks_view=Command(self.marks_view,
             text="View",
+            shortcut=Key.MOD_2+Key.V,
             order=5,
             group=marks_group,
             )
