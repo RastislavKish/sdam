@@ -24,7 +24,7 @@ When the class is over and you save everything, all the recorded audio, taken ma
 
 ## Installation
 
-The easiest way to get started is to simply grab the precompiled binaries from the [Releases](https://github.com/RastislavKish/sdam/releases) section of the GitHub repository. Currently, Linux and Windows are supported.
+The easiest way to get started is to simply grab the precompiled binaries from the [Releases](https://github.com/RastislavKish/sdam/releases) section of the GitHub repository. Currently, only Linux is supported, Windows should be coming soon.
 
 ## Usage
 
