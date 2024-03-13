@@ -163,7 +163,6 @@ flatpak_sdk = "org.gnome.Sdk"
 
 [tool.briefcase.app.sdam.windows]
 requires = [
-    "../wheels/gui_py-0.1.0-cp311-none-win_amd64.whl",
     "cytolk~=0.1.13",
     "../toga/winforms",
 ]
