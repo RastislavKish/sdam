@@ -1197,7 +1197,7 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
                 }
             #[cfg(target_os = "windows")]
             {
-                self.windows_audio_producer.len();
+                samples_in_producer=self.windows_audio_producer.len();
                 }
 
             if samples_in_producer<=(FRAME_SIZE as f64/active_rate) as usize {
