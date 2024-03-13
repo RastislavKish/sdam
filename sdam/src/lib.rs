@@ -745,7 +745,7 @@ impl AudioHandler {
 
                 let remaining_samples=data.len()-available_samples;
 
-                (&mut data[available_samples..]).copy_from_slice(&[0_i16; 5000][..remaining_samples]);
+                (&mut data[available_samples..]).copy_from_slice(&[0_i32; 5000][..remaining_samples]);
                 }
             };
 
@@ -800,7 +800,7 @@ impl AudioHandler {
 
         #[cfg(target_os = "windows")]
         {
-            for (index, sample) in &self.decoding_buffer[..decoded_samples].enumerate() {
+            for (index, sample) in self.decoding_buffer[..decoded_samples].iter().enumerate() {
                 self.windows_decoding_buffer[index]=(*sample as i32)*(i16::MAX as i32)
                 }
 
@@ -1189,7 +1189,18 @@ impl Handler<UpdateAudioBuffer> for AudioHandler {
         if let PlaybackState::Playing=self.playback_state {
             let active_rate=self.active_rate();
 
-            if self.audio_producer.len()<=(FRAME_SIZE as f64/active_rate) as usize {
+            let samples_in_producer;
+
+            #[cfg(target_os = "linux")]
+            {
+                samples_in_producer=self.audio_producer.len();
+                }
+            #[cfg(target_os = "windows")]
+            {
+                self.windows_audio_producer.len();
+                }
+
+            if samples_in_producer<=(FRAME_SIZE as f64/active_rate) as usize {
                 if let Some(current_position)=self.current_position {
                     if self.future_position.is_none() {
                         if let Some(future_frame)=self.audio.get_frame(current_position+1) {
@@ -1380,7 +1391,7 @@ impl Handler<StartRecording> for Recorder {
         {
             let mut conversion_buffer=vec![0_i16; 2000];
             input_fn=move |data: &[i32], _callback_info: &cpal::InputCallbackInfo| {
-                for (index, sample) in data.enumerate() {
+                for (index, sample) in data.iter().enumerate() {
                     conversion_buffer[index]=(*sample/(i16::MAX as i32)) as i16;
                     }
                 if let Some(chunks)=collector_buffer.push(&conversion_buffer[..data.len()]) {
