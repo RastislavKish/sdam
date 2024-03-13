@@ -20,6 +20,8 @@ use opus::{Encoder, Decoder};
 const FRAME_DURATION: usize=40; //ms
 const SAMPLING_RATE: u32=48000;
 const FRAME_SIZE: usize=(FRAME_DURATION as f64*SAMPLING_RATE as f64/1000.0) as usize;
+const PLAYBACK_BUFFER_SIZE: u32=512;
+const RECORDING_BUFFER_SIZE: u32=512;
 
 pub struct Sdam {
     audio_handler: Addr<AudioHandler>,
@@ -598,14 +600,18 @@ pub struct AudioHandler {
     recorder: Addr<Recorder>,
     recording: bool,
     decoding_buffer: Vec<i16>,
+    #[cfg(target_os = "windows")]
+    windows_decoding_buffer: Vec<i32>,
     current_position: Option<usize>,
     future_position: Option<usize>,
     rate: f64,
     _host: cpal::Host,
     _device: cpal::Device,
-    _stream_config: StreamConfig,
     _output_stream: cpal::Stream,
+    #[cfg(target_os = "linux")]
     audio_producer: ringbuf::HeapProducer<i16>,
+    #[cfg(target_os = "windows")]
+    windows_audio_producer: ringbuf::HeapProducer<i32>,
     decoder: Decoder,
     playback_state: PlaybackState,
     mark_manager: MarkManager,
@@ -620,41 +626,72 @@ impl AudioHandler {
             let audio=AudioContainer::new();
             let recorder=Recorder::new(ctx.address().recipient());
 
-            let host=cpal::default_host();
-            let device=host.default_output_device().unwrap();
-            let config=StreamConfig {
-                buffer_size: BufferSize::Fixed(FRAME_SIZE as u32),
-                channels: 1,
-                sample_rate: SampleRate(SAMPLING_RATE),
-                };
             let decoder=Decoder::new(SAMPLING_RATE, opus::Channels::Mono).unwrap();
 
-            let (output_stream, audio_producer, playback_state)=Self::initialize_playback(&device, &config);
+            #[cfg(target_os = "linux")]
+            let (_host, device, output_stream, audio_producer, playback_state)=Self::initialize_playback();
+            #[cfg(target_os = "windows")]
+            let (_host, device, output_stream, windows_audio_producer, playback_state)=Self::initialize_windows_playback();
 
-            AudioHandler {
-                self_addr,
-                file_name: None,
-                file_path: None,
-                audio,
-                recorder,
-                recording: false,
-                decoding_buffer: vec![0_i16; 2*FRAME_SIZE],
-                current_position: None,
-                future_position: None,
-                rate: 1.0,
-                _host: host,
-                _device: device,
-                _stream_config: config,
-                _output_stream: output_stream,
-                audio_producer,
-                decoder,
-                playback_state,
-                mark_manager: MarkManager::new(),
-                user_text: String::new(),
+            #[cfg(target_os = "linux")]
+            {
+                return AudioHandler {
+                    self_addr,
+                    file_name: None,
+                    file_path: None,
+                    audio,
+                    recorder,
+                    recording: false,
+                    decoding_buffer: vec![0_i16; 2*FRAME_SIZE],
+                    current_position: None,
+                    future_position: None,
+                    rate: 1.0,
+                    _host,
+                    _device: device,
+                    _output_stream: output_stream,
+                    audio_producer,
+                    decoder,
+                    playback_state,
+                    mark_manager: MarkManager::new(),
+                    user_text: String::new(),
+                    };
+                }
+            #[cfg(target_os = "windows")]
+            {
+                return AudioHandler {
+                    self_addr,
+                    file_name: None,
+                    file_path: None,
+                    audio,
+                    recorder,
+                    recording: false,
+                    decoding_buffer: vec![0_i16; 2*FRAME_SIZE],
+                    windows_decoding_buffer: vec![0_i32; 2*FRAME_SIZE],
+                    current_position: None,
+                    future_position: None,
+                    rate: 1.0,
+                    _host,
+                    _device: device,
+                    _output_stream: output_stream,
+                    windows_audio_producer,
+                    decoder,
+                    playback_state,
+                    mark_manager: MarkManager::new(),
+                    user_text: String::new(),
+                    };
                 }
             })
         }
-    fn initialize_playback(device: &cpal::Device, config: &StreamConfig) -> (cpal::Stream, ringbuf::HeapProducer<i16>, PlaybackState) {
+    #[cfg(target_os = "linux")]
+    fn initialize_playback() -> (cpal::Host, cpal::Device, cpal::Stream, ringbuf::HeapProducer<i16>, PlaybackState) {
+        let host=cpal::default_host();
+        let device=host.default_output_device().unwrap();
+        let config=StreamConfig {
+            buffer_size: BufferSize::Fixed(PLAYBACK_BUFFER_SIZE),
+            channels: 1,
+            sample_rate: SampleRate(SAMPLING_RATE),
+            };
+
         let ringbuf=HeapRb::<i16>::new(20*FRAME_SIZE);
         let (audio_producer, mut audio_consumer)=ringbuf.split();
 
@@ -673,10 +710,51 @@ impl AudioHandler {
                 }
             };
 
-        let output_stream=device.build_output_stream(config, output_fn, Self::stream_err_fn, None).unwrap();
+        let output_stream=device.build_output_stream(&config, output_fn, Self::stream_err_fn, None).unwrap();
         output_stream.play().unwrap();
 
-        (output_stream,
+        (host,
+        device,
+        output_stream,
+        audio_producer,
+        PlaybackState::Paused,)
+        }
+    #[cfg(target_os = "windows")]
+    fn initialize_windows_playback() -> (cpal::Host, cpal::Device, cpal::Stream, ringbuf::HeapProducer<i32>, PlaybackState) {
+        let host=cpal::host_from_id(cpal::HostId::Asio)
+        .expect("Failed to initialize the Asio driver");
+
+        let device=host.default_output_device().unwrap();
+        let config=StreamConfig {
+            buffer_size: BufferSize::Fixed(PLAYBACK_BUFFER_SIZE),
+            channels: 1,
+            sample_rate: SampleRate(SAMPLING_RATE),
+            };
+
+        let ringbuf=HeapRb::<i32>::new(20*FRAME_SIZE);
+        let (audio_producer, mut audio_consumer)=ringbuf.split();
+
+        let output_fn=move |data: &mut [i32], _callback_info: &cpal::OutputCallbackInfo| {
+            let available_samples=audio_consumer.len();
+
+            if available_samples>=data.len() {
+                audio_consumer.pop_slice(data);
+                }
+            else {
+                audio_consumer.pop_slice(&mut data[..available_samples]);
+
+                let remaining_samples=data.len()-available_samples;
+
+                (&mut data[available_samples..]).copy_from_slice(&[0_i16; 5000][..remaining_samples]);
+                }
+            };
+
+        let output_stream=device.build_output_stream(&config, output_fn, Self::stream_err_fn, None).unwrap();
+        output_stream.play().unwrap();
+
+        (host,
+        device,
+        output_stream,
         audio_producer,
         PlaybackState::Paused,)
         }
@@ -697,22 +775,52 @@ impl AudioHandler {
 
     fn decode_into_producer(&mut self, frame: &Arc<OpusFrame>, active_rate: f64) {
         let decoded_samples=self.decoder.decode(frame.data(), &mut self.decoding_buffer, false).unwrap();
-        if active_rate==1.0 {
-            self.audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
-            }
-        else if active_rate>1.0 {
-            let chunk=&self.decoding_buffer[..(decoded_samples as f64/active_rate) as usize];
-            self.audio_producer.push_slice(chunk);
-            }
-        else {
-            let recip_rate=active_rate.recip();
 
-            for _ in 0..recip_rate.trunc() as usize {
+        #[cfg(target_os = "linux")]
+        {
+            if active_rate==1.0 {
                 self.audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
                 }
+            else if active_rate>1.0 {
+                let chunk=&self.decoding_buffer[..(decoded_samples as f64/active_rate) as usize];
+                self.audio_producer.push_slice(chunk);
+                }
+            else {
+                let recip_rate=active_rate.recip();
 
-            if recip_rate.fract()!=0.0 {
-                self.audio_producer.push_slice(&self.decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
+                for _ in 0..recip_rate.trunc() as usize {
+                    self.audio_producer.push_slice(&self.decoding_buffer[..decoded_samples]);
+                    }
+
+                if recip_rate.fract()!=0.0 {
+                    self.audio_producer.push_slice(&self.decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
+                    }
+                }
+            }
+
+        #[cfg(target_os = "windows")]
+        {
+            for (index, sample) in &self.decoding_buffer[..decoded_samples].enumerate() {
+                self.windows_decoding_buffer[index]=(*sample as i32)*(i16::MAX as i32)
+                }
+
+            if active_rate==1.0 {
+                self.windows_audio_producer.push_slice(&self.windows_decoding_buffer[..decoded_samples]);
+                }
+            else if active_rate>1.0 {
+                let chunk=&self.windows_decoding_buffer[..(decoded_samples as f64/active_rate) as usize];
+                self.windows_audio_producer.push_slice(chunk);
+                }
+            else {
+                let recip_rate=active_rate.recip();
+
+                for _ in 0..recip_rate.trunc() as usize {
+                    self.windows_audio_producer.push_slice(&self.windows_decoding_buffer[..decoded_samples]);
+                    }
+
+                if recip_rate.fract()!=0.0 {
+                    self.windows_audio_producer.push_slice(&self.windows_decoding_buffer[..(decoded_samples as f64*recip_rate.fract()) as usize]);
+                    }
                 }
             }
         }
@@ -1189,7 +1297,6 @@ impl AudioContainer {
 pub struct Recorder {
     _host: cpal::Host,
     device: cpal::Device,
-    stream_config: StreamConfig,
     input_stream: Option<cpal::Stream>,
     encoder: Encoder,
     recipient: Recipient<NewOpusFrame>,
@@ -1197,19 +1304,24 @@ pub struct Recorder {
 impl Recorder {
 
     pub fn new(recipient: Recipient<NewOpusFrame>) -> Addr<Recorder> {
-        let host=cpal::default_host();
+        let host;
+
+        #[cfg(target_os = "linux")]
+        {
+            host=cpal::default_host();
+            }
+        #[cfg(target_os = "windows")]
+        {
+            host=cpal::host_from_id(cpal::HostId::Asio)
+            .expect("Failed to initialize the Asio driver");
+            }
+
         let device=host.default_input_device().unwrap();
-        let config=StreamConfig {
-            buffer_size: BufferSize::Fixed(FRAME_SIZE as u32),
-            channels: 1,
-            sample_rate: SampleRate(SAMPLING_RATE),
-            };
         let encoder=Encoder::new(SAMPLING_RATE, opus::Channels::Mono, opus::Application::Audio).unwrap();
 
         Recorder {
             _host: host,
             device,
-            stream_config: config,
             input_stream: None,
             encoder,
             recipient,
@@ -1245,15 +1357,41 @@ impl Handler<StartRecording> for Recorder {
         let mut collector_buffer=CollectorBuffer::with_capacity(FRAME_SIZE);
         let addr=ctx.address();
 
-        let input_fn=move |data: &[i16], _callback_info: &cpal::InputCallbackInfo| {
-            if let Some(chunks)=collector_buffer.push(data) {
-                for chunk in chunks {
-                    addr.do_send(NewAudioChunk { chunk });
-                    }
-                }
+        let config=StreamConfig {
+            buffer_size: BufferSize::Fixed(RECORDING_BUFFER_SIZE),
+            channels: 1,
+            sample_rate: SampleRate(SAMPLING_RATE),
             };
 
-        let input_stream=self.device.build_input_stream(&self.stream_config, input_fn, Self::stream_err_fn, None).unwrap();
+        let input_fn;
+
+        #[cfg(target_os = "linux")]
+        {
+            input_fn=move |data: &[i16], _callback_info: &cpal::InputCallbackInfo| {
+                if let Some(chunks)=collector_buffer.push(data) {
+                    for chunk in chunks {
+                        addr.do_send(NewAudioChunk { chunk });
+                        }
+                    }
+                };
+            }
+
+        #[cfg(target_os = "windows")]
+        {
+            let mut conversion_buffer=vec![0_i16; 2000];
+            input_fn=move |data: &[i32], _callback_info: &cpal::InputCallbackInfo| {
+                for (index, sample) in data.enumerate() {
+                    conversion_buffer[index]=(*sample/(i16::MAX as i32)) as i16;
+                    }
+                if let Some(chunks)=collector_buffer.push(&conversion_buffer[..data.len()]) {
+                    for chunk in chunks {
+                        addr.do_send(NewAudioChunk { chunk });
+                        }
+                    }
+                };
+            }
+
+        let input_stream=self.device.build_input_stream(&config, input_fn, Self::stream_err_fn, None).unwrap();
         input_stream.play().unwrap();
 
         self.input_stream=Some(input_stream);
