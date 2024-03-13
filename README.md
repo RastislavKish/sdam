@@ -36,7 +36,7 @@ There are also shortcuts for other operations, like jumping to a specific time, 
 
 ## Build from source
 
-You can also build the project from source, although the process requires some setup.
+You can also build the project from source.
 
 ### Dependencies
 
@@ -44,8 +44,9 @@ In order to build the project, you need to have the following:
 
 * [Rust programming language](https://www.rust-lang.org/tools/install)
 * [Python](https://www.python.org/)
-* [toga framework prerequisites (note: not the framework itself, that will be discussed later)](https://github.com/beeware/toga)
+* [Toga framework prerequisites (note: not the framework itself, that will be discussed later)](https://github.com/beeware/toga)
 * [Poetry (if you're building on Linux)](https://python-poetry.org/docs/)
+* [Cmake](https://cmake.org)
 
 ### Setting up the development environment
 
@@ -69,61 +70,20 @@ pip3 install patchelf # you can omit this on Windows
 
 Maturin is a tool for converting a PyO3 Rust library into an installable Python package, briefcase is a program we will use for compiling the whole project into an installable application.
 
-Now, we need to compile several local dependencies. Most importantly the gui_py package, which provides Python access to the underlying Rust core code, but also a development version of Toga (the stable-one at this point suffers from several bugs that have been fixed in the meantime), also SDAM needs its own package for communicating with Speech Dispatcher if you're on Linux.
-
-All of these deps are included in the repository, so they just need to be built into .whl files. Create a wheels directory:
+Now, we need to clone the development version of Toga.
 
 ```
-mkdir wheels # This dir is included in the .gitignore, so whatever you put in is not going to be included in the repo if you make any commits
-```
-
-Here you will copy all the *.whl output from the sections below.
-
-#### gui_py
-
-```
-cd gui_py
-maturin build --release
-cp target/wheels/*.whl ../wheels
-cd ..
-```
-
-### Toga dev
-
-```
-mkdir toga # This is also included in .gitignore
-cd toga
 git clone https://github.com/beeware/toga
-pip3 wheel ./toga/core ./toga/gtk # Replace gtk by winforms if you're on Windows
-cp *.whl ../wheels
-cd ..
 ```
 
-#### speechd
-
-```
-cd speechd
-poetry env use /usr/bin/python3
-poetry build
-cp dist/*.whl ../wheels
-cd ..
-```
-
-### Updating the briefcase configuration
-
-Now that dependencies are compiled, they need to be referred to by the briefcase configuration.
-
-```
-cd sdam
-```
-
-Edit the pyproject.toml file and wherever you spot ../wheels/, update the .whl file name with the one corresponding with the files you got from the build processes. The names will likely differ just in the Python version used. Note you don't need to update files that are not used by your platform.
+This should be a temporary requirement, the stable Toga at this point suffers from several bugs that have been fixed in the development version. Once they get released, SDAM will use the stable version and this step won't be necessary.
 
 ### Build, run and package
 
 Everything is in place, now all that remains is to perform a build, test everything by running the result and, eventually, packaging the program.
 
 ```
+cd sdam # gui_py/sdam
 briefcase build -r
 briefcase run
 briefcase package
@@ -138,14 +98,14 @@ Generally, SDAM consists of a:
 * Graphical frontend, written in Python
 * Rust core
 
-The graphical frontend is a Briefcase app using the Toga GUI framework, which manages interaction with the user (not anything else). It includes a PyO3 package called gui_py, which is supposed to represent a SDAM document, which is functionally self-contained i.e. it can start recording into itself, stop recording into itself, start, pause and otherwise control playback, provide information about marks etc. Although, not all concepts of SDAM are reflected in its core, for example, timetravel is technically implemented as playback happening at the same time as recording, however the core does not implement it as a separate functionality, it's upto the GUI to control both activities and present them as a consistent function to the user.
+The graphical frontend is a Briefcase app using the Toga GUI framework, which manages interaction with the user (not anything else). It includes a PyO3 package called backend, which is supposed to represent a SDAM document, which is functionally self-contained i.e. it can start recording into itself, stop recording into itself, start, pause and otherwise control playback, provide information about marks etc. Although, not all concepts of SDAM are reflected in its core, for example, timetravel is technically implemented as playback happening at the same time as recording, however the core does not implement it as a separate functionality, it's upto the GUI to control both activities and present them as a consistent function to the user.
 
-At this moment, gui_py can work with only one document at a time, just like the whole GUI, and the interface are simple top-level functions.
+At this moment, backend can work with only one document at a time, just like the whole GUI, and the interface are simple top-level functions.
 
 The SDAM core library consists of two important parts:
 
 * a Sdam structure, intended to represent a SDAM document for Rust frontends
-* AudioHandler actor, this is basically the actual implementation of all the functions the Sdam structure provides, internally, Sdam always starts this actor when it's created and then just communicates with it through messages. The actor is called AudioHandler for historical reasons, it will likely eventually get renamed when I come up with a less confusing name. Either way, this nor any other actor are not intended to be used by anything outside the core library, i.e. they're completely internal implementation detail.
+* AudioHandler actor, this is basically the actual implementation of all the functions the Sdam structure provides, internally, Sdam always starts this actor when it's created and then just communicates with it through messages. The actor is called AudioHandler for historical reasons, it will likely eventually get renamed when I come up with a less confusing name. Either way, this nor any other actor are not intended to be used by anything outside the core library, i.e. they're a completely internal implementation detail.
 
 ## License
 
